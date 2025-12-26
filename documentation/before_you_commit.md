@@ -1,0 +1,1 @@
+Please ensure all Jupyter Notebook outputs are cleared before committing to keep the repository size manageable.
