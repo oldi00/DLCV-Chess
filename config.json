@@ -1,0 +1,15 @@
+{
+  "zip_path_chessred": "G:/Meine Ablage/DLCV/chessred.zip",
+  "zip_path_chessred2k": "G:/Meine Ablage/DLCV/chessred2k.zip",
+  "data_dir": "G:/Meine Ablage/DLCV/ChessReD",
+  "annotation_file": "G:/Meine Ablage/DLCV/annotations.json",
+  "preprocessed_output_dir": "G:/Meine Ablage/DLCV/ChessReD_Hough",
+  "train_pickle_path": "G:/Meine Ablage/DLCV/chessred_hough.pkl",
+  "val_pickle_path": "G:/Meine Ablage/DLCV/chessred_hough_val.pkl",
+  "test_pickle_path": "G:/Meine Ablage/DLCV/chessred_hough_test.pkl",
+  "real_image_dir": "G:/Meine Ablage/DLCV/New Photos/Overhead",
+  "real_labels_json": "G:/Meine Ablage/DLCV/real_labels.json",
+  "real_board_pickle_path": "G:/Meine Ablage/DLCV/RealBoard_Overhead_Hough.pkl",
+  "model_save_dir": "G:/Meine Ablage/DLCV/customV5-residuals-dropout-chessred-full",
+  "best_model_weights": "G:/Meine Ablage/DLCV/customV5-residuals-dropout-chessred-full/epoch35.pth"
+}
