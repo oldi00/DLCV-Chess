@@ -610,18 +610,35 @@ def evaluate_plus(
 
 
 if __name__ == "__main__":
+    n_tasks = int(os.environ.get("SLURM_NTASKS", 1))
+    task_id = int(os.environ.get('SLURM_PROCID', 0))
+    local_rank = int(os.environ.get("SLURM_LOCALID", 0))
+
+    if torch.cuda.is_available():
+        torch.cuda.set_device(local_rank)
+        device = torch.device(f"cuda:{local_rank}")
+    else:
+        device = torch.device("cpu")
+    print(f"[{task_id}] Process using GPU: {torch.cuda.get_device_name(local_rank) if torch.cuda.is_available() else 'CPU'}")
+
+    # Load Configuration 
     with open('config.json', 'r') as f:
         config = json.load(f)
-    
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(f"Running on device: {device}")
 
     save_dir = get_config_path(config, 'model_save_dir')
 
+    # Initialize Data and Model 
     train_loader = get_train_loader(config, batch_size=16)
     val_loader = get_val_loader(config, batch_size=16)
 
     model = CustomChessCNN_v3(num_classes=13, dropout=0.3).to(device)
+    
     train(
-        model=model, dataloader=train_loader, device=device, epochs=15, save_model=True, save_dir=save_dir, val_loader=val_loader
+        model=model, 
+        dataloader=train_loader, 
+        device=device, 
+        epochs=15, 
+        save_model=True, 
+        save_dir=save_dir, 
+        val_loader=val_loader
     )
