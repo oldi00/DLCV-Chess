@@ -13,10 +13,10 @@
   "model_save_dir": "G:/Meine Ablage/DLCV/customV5-residuals-dropout-chessred-full",
   "best_model_weights": "G:/Meine Ablage/DLCV/customV5-residuals-dropout-chessred-full/epoch35.pth",
 
-  "cluster_preprocessed_dir": "/scratch/vihps/vihps01/ChessReD_Hough",
+  "cluster_preprocessed_output_dir": "/scratch/vihps/vihps01/ChessReD_Hough",
   "cluster_annotation_file": "/scratch/vihps/vihps01/chessred/annotations.json",
   "cluster_model_save_dir": "/scratch/vihps/vihps01/chessred/models",
-  "cluster_train_pickle": "/scratch/vihps/vihps01/chessred/chessred_hough.pkl",
-  "cluster_val_pickle": "/scratch/vihps/vihps01/chessred/chessred_hough_val.pkl",
-  "cluster_test_pickle": "/scratch/vihps/vihps01/chessred/chessred_hough_test.pkl"
+  "cluster_train_pickle_path": "/scratch/vihps/vihps01/chessred/chessred_hough.pkl",
+  "cluster_val_pickle_path": "/scratch/vihps/vihps01/chessred/chessred_hough_val.pkl",
+  "cluster_test_pickle_path": "/scratch/vihps/vihps01/chessred/chessred_hough_test.pkl"
 }

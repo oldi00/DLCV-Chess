@@ -31,6 +31,8 @@ sbatch --job-name="$JOB_NAME" \
        --output="$output" \
        --error="$error" \
        --no-requeue \
+       --mail-user="your.email@address.com" \
+       --mail-type="ALL" \
        --wrap="
            eval \"\$(conda shell.bash hook)\"
            conda activate $CONDA_ENV

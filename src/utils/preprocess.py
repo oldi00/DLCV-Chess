@@ -4,11 +4,19 @@ import matplotlib.pyplot as plt
 import os
 import pickle
 import torch
-
+import json
 
 from tqdm import tqdm
 from collections import defaultdict
 
+
+# --- Environment Detection Helper ---
+def get_config_path(config, key):
+    """Detects if running on cluster and resolves the correct path."""
+    on_cluster = "SLURM_JOB_ID" in os.environ
+    if on_cluster:
+        return config.get(f"cluster_{key}", config.get(key))
+    return config.get(key)
 
 # =============
 # Preprocessing
@@ -26,13 +34,13 @@ piece_to_label = {
 }
 
 
-def converting_annotations_to_fen(data_dir="G:/Meine Ablage/DLCV/ChessReD", annotations="G:/Meine Ablage/DLCV/annotations.json"):
-    image_id_to_path = {img['id']: os.path.join(data_dir, img['path']) for img in annotations['images']}
-
+def converting_annotations_to_fen(data_dir=None, annotations_data=None):
+    image_id_to_path = {img['id']: os.path.join(data_dir, img['path']) for img in annotations_data['images']}
     image_to_pieces = defaultdict(list)
-    for ann in annotations['annotations']['pieces']:
+
+    for ann in annotations_data['annotations']['pieces']:
         image_to_pieces[ann['image_id']].append(ann)
-    
+
     return image_id_to_path, image_to_pieces
 
 
@@ -422,7 +430,7 @@ def preprocess_chessred_test(annotations="G:/Meine Ablage/DLCV/annotations.json"
 
 def preprocess_and_save_splits(
         splits_to_process=["train", "val", "test"],
-        annotations="G:/Meine Ablage/DLCV/annotations.json",
+        annotations_path="G:/Meine Ablage/DLCV/annotations.json",
         data_dir="G:/Meine Ablage/DLCV/ChessReD",
         save_dir="G:/Meine Ablage/DLCV/ChessReD_Hough"
         ):
@@ -431,6 +439,9 @@ def preprocess_and_save_splits(
     labels (FEN) into pickle files for specified splits.
     """
     os.makedirs(save_dir, exist_ok=True)
+
+    with open(annotations_path, "r") as f:
+        annotations = json.load(f)
 
     for split in splits_to_process:
         print(f"\n🚀 Processing Split: {split.upper()}")
@@ -460,7 +471,7 @@ def preprocess_and_save_splits(
 
                 # Save warped image to Drive
                 img_save_path = os.path.join(save_dir, f"{i}.png")
-                cv2.imwrite(img_save_path, warped)
+                # cv2.imwrite(img_save_path, warped)
 
                 # Get and store FEN
                 pieces = image_to_pieces[i]
@@ -485,5 +496,61 @@ def preprocess_and_save_splits(
         print(f"📦 Saved to: {pkl_filename}")
 
 
+def fast_rebuild_pickles(config):
+    """
+    Dynamically rebuilds pickles using paths from config.json.
+    Automatically switches between Local and Cluster storage.
+    """
+    # Resolve Paths from Config
+    base_dir = get_config_path(config, "preprocessed_output_dir").split("ChessReD_Hough")[0] # Root DLCV dir
+    save_dir = get_config_path(config, "preprocessed_output_dir")
+    annotations_path = get_config_path(config, "annotation_file")
+
+    print(f"📖 Loading annotations from: {annotations_path}")
+    with open(annotations_path, "r") as f:
+        annotations = json.load(f)
+
+    print("🔍 Indexing existing warped images...")
+    if not os.path.exists(save_dir):
+        print(f"⚠️ Warning: {save_dir} not found. Ensure images are uploaded.")
+        return
+
+    existing_files = {f.name for f in os.scandir(save_dir) if f.is_file()}
+    print(f"📂 Found {len(existing_files)} images in {save_dir}")
+
+    image_to_pieces = defaultdict(list)
+    for ann in annotations['annotations']['pieces']:
+        image_to_pieces[ann['image_id']].append(ann)
+
+    for split in ["train", "val", "test"]:
+        print(f"\n⚡ Processing {split.upper()} split...")
+        X, y = [], []
+        image_ids = annotations['splits'][split]['image_ids']
+
+        for i in tqdm(image_ids):
+            filename = f"{i}.png"
+            if filename in existing_files:
+                try:
+                    pieces = image_to_pieces[i]
+                    fen = pieces_to_fen(pieces)
+                    full_path = os.path.join(save_dir, filename)
+                    X.append(full_path)
+                    y.append(fen)
+                except Exception:
+                    continue
+
+        # Dynamic Naming
+        suffix = f"_{split}" if split != "train" else ""
+        output_filename = f"chessred_hough{suffix}.pkl"
+        output_path = os.path.join(base_dir, output_filename)
+        
+        with open(output_path, "wb") as f:
+            pickle.dump((X, y), f)
+        
+        print(f"✅ Created {output_filename} with {len(X)} entries.")
+
 if __name__ == "__main__":
-    pass
+    # Load config to pass to the rebuild function
+    with open('config.json', 'r') as f:
+        config_data = json.load(f)
+    fast_rebuild_pickles(config_data)

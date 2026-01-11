@@ -9,9 +9,8 @@ import torch.nn.functional as F
 import json
 
 from models import CustomChessCNN_v3
-from utils.dataset import train_loader, val_loader
+from utils.dataset import get_config_path, get_train_loader, get_val_loader, get_test_loader
 from tqdm import tqdm
-from itertools import islice
 
 
 def train(
@@ -49,10 +48,9 @@ def train(
         total_all = 0
         total_non_empty = 0
 
-        for images, label_rotations in islice(dataloader, 5):
+        for images, label_rotations in dataloader:
             images = images.to(device)
             label_rotations = [[lbl.to(device) for lbl in rotations] for rotations in label_rotations]
-            print("Here")
 
             optimizer.zero_grad()
             outputs = model(images)  # (B, 64, 13)
@@ -102,32 +100,36 @@ def train(
 
     # --- Plotting ---
     if plot_loss:
-        plt.figure(figsize=(12, 5))
 
-        # Loss plot
-        plt.subplot(1, 2, 1)
-        plt.plot(epoch_train_losses, label='Train Loss')
-        if val_loader is not None:
-            plt.plot(epoch_val_losses, label='Val Loss')
-        plt.xlabel('Epoch')
-        plt.ylabel('Loss')
-        plt.title('Loss Curve')
-        plt.legend()
+        if "SLURM_JOB_ID" in os.environ:
+            plt.figure(figsize=(12, 5))
 
-        # Accuracy plot
-        plt.subplot(1, 2, 2)
-        plt.plot(epoch_train_acc_all, label='Train Acc (All)')
-        plt.plot(epoch_train_acc_no_empty, label='Train Acc (Non-Empty)')
-        if val_loader is not None:
-            plt.plot(epoch_val_acc_all, label='Val Acc (All)')
-            plt.plot(epoch_val_acc_no_empty, label='Val Acc (Non-Empty)')
-        plt.xlabel('Epoch')
-        plt.ylabel('Accuracy')
-        plt.title('Accuracy Curve')
-        plt.legend()
+            # Loss plot
+            plt.subplot(1, 2, 1)
+            plt.plot(epoch_train_losses, label='Train Loss')
+            if val_loader is not None:
+                plt.plot(epoch_val_losses, label='Val Loss')
+            plt.xlabel('Epoch')
+            plt.ylabel('Loss')
+            plt.title('Loss Curve')
+            plt.legend()
 
-        plt.tight_layout()
-        plt.show()
+            # Accuracy plot
+            plt.subplot(1, 2, 2)
+            plt.plot(epoch_train_acc_all, label='Train Acc (All)')
+            plt.plot(epoch_train_acc_no_empty, label='Train Acc (Non-Empty)')
+            if val_loader is not None:
+                plt.plot(epoch_val_acc_all, label='Val Acc (All)')
+                plt.plot(epoch_val_acc_no_empty, label='Val Acc (Non-Empty)')
+            plt.xlabel('Epoch')
+            plt.ylabel('Accuracy')
+            plt.title('Accuracy Curve')
+            plt.legend()
+
+            plt.tight_layout()
+            plt.show()
+        else:
+            print("Cluster environment detected: Skipping plots.")
 
 
 def evaluate_rotation_invariant(model, dataloader, device, empty_class_idx=12):
@@ -610,14 +612,16 @@ def evaluate_plus(
 if __name__ == "__main__":
     with open('config.json', 'r') as f:
         config = json.load(f)
-    save_model_dir = config['model_save_dir']
-    if torch.cuda.is_available():
-        device = 'cuda'
-    else:
-        device = 'cpu'
+    
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(f"Running on device: {device}")
 
-    print("Device:", device)
+    save_dir = get_config_path(config, 'model_save_dir')
+
+    train_loader = get_train_loader(config, batch_size=16)
+    val_loader = get_val_loader(config, batch_size=16)
+
     model = CustomChessCNN_v3(num_classes=13, dropout=0.3).to(device)
     train(
-        model=model, dataloader=train_loader, device=device, epochs=5, save_model=True, save_dir=save_model_dir, val_loader=val_loader
+        model=model, dataloader=train_loader, device=device, epochs=15, save_model=True, save_dir=save_dir, val_loader=val_loader
     )
