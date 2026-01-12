@@ -1,5 +1,7 @@
 tempCodeRunnerFile*
 sandbox/
+data/chess_games/
+data/FENs/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
