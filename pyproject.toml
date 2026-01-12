@@ -3,7 +3,8 @@ name = "src"
 version = "0.1.0"
 description = ""
 authors = [
-    {name = "oldi",email = "oldenburgermarkus@gmail.com"}
+    {name = "oldi", email = "oldenburgermarkus@gmail.com"},
+    {name = "Miles Lenz", email = "miles@lenz-be.de"},
 ]
 package-mode = false
 readme = "README.md"
