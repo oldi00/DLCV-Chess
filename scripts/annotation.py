@@ -22,7 +22,7 @@ DIR_IMAGES_RAW = Path("data/chess_games/raw/")
 DIR_IMAGES_ANNOTATED = Path("data/chess_games/annotated/")
 
 
-def process_game(fen_path: Path):
+def annotate_game(fen_path: Path):
     """Annotate a single game."""
 
     game_name = fen_path.stem
@@ -35,7 +35,7 @@ def process_game(fen_path: Path):
     fens = [fen.strip().split(" ")[0].replace("/", "_") for fen in fens]
 
     dir_raw_images = DIR_IMAGES_RAW / game_name
-    raw_images = sorted([img for img in dir_raw_images.iterdir()])
+    raw_images = sorted(dir_raw_images.iterdir())
 
     dir_fen_images = DIR_IMAGES_ANNOTATED / game_name
     dir_fen_images.mkdir(parents=True, exist_ok=True)
@@ -71,7 +71,7 @@ def main():
     print(f"[info] Found {len(list(DIR_FEN.iterdir()))} games to annotate.")
 
     for fen_path in DIR_FEN.iterdir():
-        process_game(fen_path)
+        annotate_game(fen_path)
 
 
 if __name__ == "__main__":
