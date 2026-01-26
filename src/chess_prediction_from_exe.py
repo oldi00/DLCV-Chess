@@ -39,8 +39,7 @@ for feld_logits in raw_matrix:
     predictions.append(figur)
 
 board = np.array(predictions).reshape(8, 8)
-print(board)
-print(len(raw_matrix))
+# print(raw_matrix)
 print()
 for row in raw_matrix:
     print(row)

@@ -5,10 +5,11 @@ import os
 import sys
 import onnxruntime as ort
 import json
+import io
 from PIL import Image
 
 # ============================
-# 1. Lightweight Preprocessing
+# 1. Helper & Preprocessing
 # ============================
 id_to_piece = {
     0: "P",
@@ -25,6 +26,19 @@ id_to_piece = {
     11: "k",
     12: "1",
 }
+
+
+def softmax(x):
+    """
+    Berechnet die Softmax-Funktion für jede Zeile einer Matrix x.
+    Formel: exp(x) / sum(exp(x))
+    Stabilisiert durch Subtraktion des Maximums (verhindert Overflow).
+    """
+    # x hat Form (64, 13)
+    # Maximum pro Zeile abziehen für numerische Stabilität
+    e_x = np.exp(x - np.max(x, axis=1, keepdims=True))
+    # Teilen durch die Summe pro Zeile
+    return e_x / np.sum(e_x, axis=1, keepdims=True)
 
 
 def order_points_robust(pts):
@@ -104,12 +118,11 @@ def logits_to_fen(pred_indices):
 
 
 # ============================
-# 2. Inference Logic (ONNX)
+# 2. Inference Logic
 # ============================
 
 
-def run_inference(image_path, model_path, is_preprocessed, raw_mode=False):
-    # Support for internal bundled path (PyInstaller)
+def run_inference(input_data, model_path, is_preprocessed, raw_mode=False):
     if hasattr(sys, "_MEIPASS"):
         model_path = os.path.join(sys._MEIPASS, model_path)
 
@@ -120,24 +133,38 @@ def run_inference(image_path, model_path, is_preprocessed, raw_mode=False):
             print(f"Error loading model: {e}")
         return
 
-    # Remove Quotes from path if user added them
-    image_path = image_path.strip().strip('"').strip("'")
-
-    if not os.path.exists(image_path):
-        if not raw_mode:
-            print(f"Error: Image file does not exist: {image_path}")
-        return
+    # --- INPUT PROCESSING ---
+    pil_image = None
+    img_bgr = None
 
     try:
-        if is_preprocessed:
-            pil_image = Image.open(image_path).convert("RGB")
-        else:
-            img_bgr = cv2.imread(image_path)
-            if img_bgr is None:
-                if not raw_mode:
-                    print("Error: Could not read image.")
+        # Case A: Bytes
+        if isinstance(input_data, bytes):
+            if is_preprocessed:
+                pil_image = Image.open(io.BytesIO(input_data)).convert("RGB")
+            else:
+                nparr = np.frombuffer(input_data, np.uint8)
+                img_bgr = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                if img_bgr is None:
+                    return
+
+        # Case B: File Path
+        elif isinstance(input_data, str):
+            input_data = input_data.strip().strip('"').strip("'")
+            if not os.path.exists(input_data):
                 return
 
+            if is_preprocessed:
+                pil_image = Image.open(input_data).convert("RGB")
+            else:
+                img_bgr = cv2.imread(input_data)
+                if img_bgr is None:
+                    return
+        else:
+            return
+
+        # --- CORNER DETECTION ---
+        if not is_preprocessed and pil_image is None:
             if not raw_mode:
                 print("Detecting corners...")
             corners = detect_board_corners(img_bgr)
@@ -149,22 +176,28 @@ def run_inference(image_path, model_path, is_preprocessed, raw_mode=False):
             warped_bgr = warp_board(img_bgr, corners)
             pil_image = Image.fromarray(cv2.cvtColor(warped_bgr, cv2.COLOR_BGR2RGB))
 
+        # --- INFERENCE ---
         input_tensor = preprocess_image_numpy(pil_image)
         input_name = ort_session.get_inputs()[0].name
 
-        # Inference
+        # outputs[0] Shape: (1, 64, 13) - Logits
         outputs = ort_session.run(None, {input_name: input_tensor})
 
-        # --- RAW MODE OUTPUT ---
+        # --- RAW MODE: Probabilities ---
         if raw_mode:
-            matrix = outputs[0][0].tolist()
+            logits = outputs[0][0]  # (64, 13)
+
+            # WICHTIG: Hier Logits zu Wahrscheinlichkeiten umwandeln
+            probs = softmax(logits)
+
+            # Als Liste für JSON exportieren
+            matrix = probs.tolist()
             print(json.dumps(matrix))
             return
-        # -----------------------
+        # -------------------------------
 
         pred_indices = np.argmax(outputs[0], axis=2)
         pred_indices_flat = pred_indices[0]
-
         fen, board_grid = logits_to_fen(pred_indices_flat)
 
         print("\n" + "=" * 30)
@@ -182,55 +215,42 @@ def run_inference(image_path, model_path, is_preprocessed, raw_mode=False):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="ChessPredictor: Detect FEN from Image"
-    )
+    parser = argparse.ArgumentParser(description="ChessPredictor")
     parser.add_argument("image_path", nargs="?", type=str, help="Path to input image")
+    parser.add_argument(
+        "--stdin", action="store_true", help="Read image bytes from standard input"
+    )
     parser.add_argument(
         "--model", type=str, default="chess_model.onnx", help="Path to .onnx file"
     )
     parser.add_argument(
-        "--preprocessed",
-        action="store_true",
-        help="Use if image is already cropped/warped 400x400",
+        "--preprocessed", action="store_true", help="Use if image is already cropped"
     )
     parser.add_argument(
-        "--raw", action="store_true", help="Output only the raw 64x13 matrix as JSON"
+        "--raw",
+        action="store_true",
+        help="Output only the 64x13 PROBABILITY matrix as JSON",
     )
 
     args = parser.parse_args()
 
-    # Case 1: Arguments provided (Command Line Use)
-    if args.image_path:
+    if args.stdin:
+        image_bytes = sys.stdin.buffer.read()
+        if image_bytes:
+            run_inference(image_bytes, args.model, args.preprocessed, args.raw)
+    elif args.image_path:
         run_inference(args.image_path, args.model, args.preprocessed, args.raw)
-
-    # Case 2: No arguments (Interactive / Double Click Mode)
     else:
         print("################################################")
-        print("#             ChessPredictor v1.0              #")
+        print("#         ChessPredictor (Probabilities)       #")
         print("################################################")
-        print("\n[INFO] Interactive Mode active.")
-        print("\n[TIP]  Advanced Command Line Usage:")
-        print("       ChessPredictor.exe <path_to_image> [FLAGS]")
-        print("\n       Available Flags:")
-        print("       --raw           -> Outputs purely the 64x13 data matrix (JSON)")
-        print(
-            "       --preprocessed  -> Skip corner detection (if image is already cropped)"
-        )
-        print("       --help          -> Show full help message")
-        print("\n" + "-" * 48)
-
         while True:
             print("\nEnter path to image file (or type 'q' to quit):")
             user_input = input(">> ")
-
             if user_input.lower() in ["q", "quit", "exit"]:
                 break
-
             if not user_input.strip():
                 continue
-
-            # Interactive runs standard visual inference
             run_inference(
                 user_input, "chess_model.onnx", is_preprocessed=False, raw_mode=False
             )
