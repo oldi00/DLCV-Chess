@@ -81,3 +81,50 @@ def find_intersections(lines_a, lines_b):
             intersections.append([int(np.round(x0)), int(np.round(y0))])
 
     return np.array(intersections)
+
+
+def order_points(pts):
+    """
+    Order 4 points in [top-left, top-right, bottom-right, bottom-left] order
+    using the angle from the centroid.
+    """
+
+    pts = np.array(pts, dtype="float32")
+
+    center = np.mean(pts, axis=0)
+
+    diff = pts - center
+    angles = np.arctan2(diff[:, 1], diff[:, 0])
+
+    # Sort points based on the angles
+    # This typically results in the order [TL, TR, BR, BL] because
+    # image y-axis is inverted (down is positive).
+    sort_indices = np.argsort(angles)
+    ordered_pts = pts[sort_indices]
+
+    # Sometimes the cycle starts at the wrong corner (e.g. Bottom-Left first).
+    # We rotate the array so the point with the smallest sum (x+y) is first (Top-Left).
+    s = ordered_pts.sum(axis=1)
+    tl_idx = np.argmin(s)
+
+    # Roll the array so the Top-Left point is at index zero.
+    ordered_pts = np.roll(ordered_pts, -tl_idx, axis=0)
+
+    return ordered_pts
+
+
+def get_top_down_view(image, corners, target_size):
+    """Warps the object defined by 'corners' into a top-down view."""
+
+    maxWidth, maxHeight = target_size
+
+    dst = np.array([
+        [0, 0],
+        [maxWidth - 1, 0],
+        [maxWidth - 1, maxHeight - 1],
+        [0, maxHeight - 1]], dtype="float32")
+
+    M = cv2.getPerspectiveTransform(corners, dst)
+    warped = cv2.warpPerspective(image, M, (maxWidth, maxHeight))
+
+    return warped
