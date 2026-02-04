@@ -107,9 +107,9 @@ def draw_board(img, board_corners, color=(0, 255, 127), size=3):
 
     points = points.reshape((-1, 1, 2))
 
-    cv2.polylines(img, [points], True, color, size)
+    img_board = cv2.polylines(img.copy(), [points], True, color, size)
 
-    return img
+    return img_board
 
 
 def draw_points(img, points, color=(250, 20, 50)):
@@ -149,3 +149,31 @@ def plot_histograms(plot_title, *histograms, cols=2):
         ax.plot(peaks, peak_heights, 'rx', markersize=8)
 
     plt.show()
+
+
+def draw_grid_on_board(img, color=(0, 255, 0), thickness=2):
+
+    img_grid = img.copy()
+
+    h, w = img_grid.shape[:2]
+
+    step_x = w / 8.0
+    step_y = h / 8.0
+
+    # Draw Vertical Lines (columns)
+    for i in range(0, 9):
+        x = int(round(i * step_x))
+        if i == 8:
+            x = w - 1
+
+        cv2.line(img_grid, (x, 0), (x, h), color, thickness)
+
+    # Draw Horizontal Lines (rows)
+    for i in range(0, 9):
+        y = int(round(i * step_y))
+        if i == 8:
+            y = h - 1
+
+        cv2.line(img_grid, (0, y), (w, y), color, thickness)
+
+    return img_grid
