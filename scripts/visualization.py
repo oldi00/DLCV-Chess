@@ -25,7 +25,7 @@ def resize_and_crop(img, target_size=(512, 512)):
     return cropped
 
 
-def plot_images(plot_title, images, cols=3):
+def plot_images(plot_title, images, cols=3, normalize_img_size=True):
 
     n = len(images)
     rows = int(np.ceil(n / cols))
@@ -42,7 +42,10 @@ def plot_images(plot_title, images, cols=3):
 
     for i, (title, img) in enumerate(images):
         ax = axes.flat[i]
-        ax.imshow(resize_and_crop(img), cmap="gray")
+        img = img.astype(np.uint8)
+        if normalize_img_size:
+            img = resize_and_crop(img)
+        ax.imshow(img, cmap="gray")
         if title is not None:
             ax.set_title(
                 f"{i+1}. {title}",
@@ -81,6 +84,8 @@ def draw_lines(img, lines, color=(255, 255, 255), size=2):
 
 def draw_many_lines(img, lines_list, colors):
 
+    img = img.copy()
+
     for lines, color in zip(lines_list, colors):
         draw_lines(img, lines, color)
 
@@ -107,10 +112,10 @@ def draw_board(img, board_corners, color=(0, 255, 127), size=3):
     return img
 
 
-def draw_points(img, points, color):
+def draw_points(img, points, color=(250, 20, 50)):
 
     for x, y in points:
-        cv2.circle(img, (x, y), 5, color, -1)
+        cv2.circle(img, (int(x), int(y)), 5, color, -1)
 
     return img
 
