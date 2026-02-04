@@ -28,7 +28,7 @@ def resize_image(img, target_width=512):
 
     resized = cv2.resize(img, (new_width, new_height), interpolation=interpolation)
 
-    return resized
+    return resized, scale
 
 
 def preprocess_image(img):
@@ -128,3 +128,15 @@ def get_top_down_view(image, corners, target_size):
     warped = cv2.warpPerspective(image, M, (maxWidth, maxHeight))
 
     return warped
+
+
+def get_outer_lines(lines_a, lines_b):
+    """Return the outermost lines of the two sets based on their rho value."""
+
+    lines_a = lines_a[np.argsort(lines_a[:, 0])]
+    lines_b = lines_b[np.argsort(lines_b[:, 0])]
+
+    outer_lines_a = [lines_a[0], lines_a[-1]]
+    outer_lines_b = [lines_b[0], lines_b[-1]]
+
+    return (outer_lines_a, outer_lines_b)
