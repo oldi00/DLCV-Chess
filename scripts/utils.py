@@ -60,3 +60,24 @@ def detect_hough_lines(edges, threshold=60):
     hough_lines = cv2.HoughLines(edges, rho=1, theta=np.pi/360, threshold=threshold)
 
     return hough_lines.squeeze()
+
+
+def find_intersections(lines_a, lines_b):
+    """Find the (x, y) intersection points between two sets of lines."""
+
+    intersections = []
+
+    for rho1, theta1 in lines_a:
+        for rho2, theta2 in lines_b:
+
+            a = np.array([
+                [np.cos(theta1), np.sin(theta1)],
+                [np.cos(theta2), np.sin(theta2)]
+            ])
+            b = np.array([rho1, rho2])
+
+            x0, y0 = np.linalg.solve(a, b)
+
+            intersections.append([int(np.round(x0)), int(np.round(y0))])
+
+    return np.array(intersections)
