@@ -131,6 +131,9 @@ def get_board_lines(lines):
 
     estimated_square_size = np.median(gaps)
 
+    if np.isnan(estimated_square_size) or estimated_square_size <= 0:
+        return np.array([])
+
     cluster_eps = estimated_square_size * 2.2
 
     rhos_clean = lines[:, 0].reshape(-1, 1)
@@ -183,14 +186,16 @@ def find_board(image_path, debug=False):
     board_lines_a = get_board_lines(candidates_a)
     board_lines_b = get_board_lines(candidates_b)
 
+    if len(board_lines_a) < 2 or len(board_lines_b) < 2:
+        return (None, None) if debug else None
+
     outer_lines = utils.get_outer_lines(board_lines_a, board_lines_b)
 
     corners = utils.find_intersections(*outer_lines)
     corners = utils.order_points(corners)
 
-    corners_original = corners / scale
-
-    chess_board = utils.get_top_down_view(img, corners_original, (400, 400))
+    corners_scaled = corners / scale
+    chess_board = utils.get_top_down_view(img, corners_scaled, (400, 400))
 
     if not debug:
         return chess_board
@@ -205,7 +210,7 @@ def find_board(image_path, debug=False):
         "board_lines": (board_lines_a, board_lines_b),
         "outer_lines": outer_lines,
         "corners": corners,
-        "corners_original": corners_original,
+        "corners_scaled": corners_scaled,
     }
 
     return chess_board, debug_info
