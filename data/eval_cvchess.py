@@ -13,7 +13,9 @@ Loads `epoch31.pth`, computes metrics, and draws the requested plots.
 """
 
 # Cell 1 — setup + file check
-import os, json, csv
+import os
+import json
+import csv
 from pathlib import Path
 import numpy as np
 import torch
@@ -40,7 +42,6 @@ else:
     print("Model file not found — check your path.")
 
 import torch
-import torch.nn as nn
 
 class PreActResidualBlock(nn.Module):
     def __init__(self, in_channels, out_channels, stride=1, dropout=0.0):
@@ -271,13 +272,14 @@ qualitative = {
 print(json.dumps(qualitative, indent=2))
 
 # --- Setup
-import os, json, csv
+import os
+import json
+import csv
 from pathlib import Path
 import numpy as np
 import torch
 import torch.nn as nn
 import matplotlib.pyplot as plt
-from sklearn.metrics import confusion_matrix
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 MODEL_PATH = "/content/epoch31.pth"
@@ -445,7 +447,6 @@ for split, m in results.items():
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
-from sklearn.metrics import confusion_matrix
 
 # ==== helper to run inference and collect predictions ====
 @torch.no_grad()

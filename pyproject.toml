@@ -33,5 +33,6 @@ url = "https://download.pytorch.org/whl/cu124"
 priority = "explicit"
 [dependency-groups]
 dev = [
-    "pyinstaller (>=6.18.0,<7.0.0)"
+    "pyinstaller (>=6.18.0,<7.0.0)",
+    "ruff (>=0.15.0,<0.16.0)"
 ]

@@ -9,7 +9,7 @@ import io
 from PIL import Image
 
 # ============================
-# 1. Helper & Preprocessing
+# Helper & Preprocessing
 # ============================
 id_to_piece = {
     0: "P",

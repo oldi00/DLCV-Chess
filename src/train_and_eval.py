@@ -8,17 +8,29 @@ import cv2
 import torch.nn.functional as F
 import json
 
+from utils.preprocess import id_to_piece as DEFAULT_ID_TO_PIECE
 from models import CustomChessCNN_v3
-from utils.dataset import get_config_path, get_train_loader, get_val_loader, get_test_loader
+from utils.dataset import (
+    get_config_path,
+    get_train_loader,
+    get_val_loader,
+)
 from tqdm import tqdm
 
 
 def train(
-    model, dataloader, device, epochs=15,
-    save_model=True, save_dir=None,
-    plot_loss=True, lr=1e-4, weight_decay=1e-5,
-    empty_class_idx=12, empty_class_weight=0.3,
-    val_loader=None  # <- added
+    model,
+    dataloader,
+    device,
+    epochs=15,
+    save_model=True,
+    save_dir=None,
+    plot_loss=True,
+    lr=1e-4,
+    weight_decay=1e-5,
+    empty_class_idx=12,
+    empty_class_weight=0.3,
+    val_loader=None,  # <- added
 ):
     model = model.to(device)
 
@@ -37,7 +49,9 @@ def train(
     epoch_val_acc_no_empty = []
 
     if save_model:
-        assert save_dir is not None, "Please provide a save_dir to save model checkpoints."
+        assert (
+            save_dir is not None
+        ), "Please provide a save_dir to save model checkpoints."
         os.makedirs(save_dir, exist_ok=True)
 
     for epoch in range(epochs):
@@ -50,7 +64,9 @@ def train(
 
         for images, label_rotations in dataloader:
             images = images.to(device)
-            label_rotations = [[lbl.to(device) for lbl in rotations] for rotations in label_rotations]
+            label_rotations = [
+                [lbl.to(device) for lbl in rotations] for rotations in label_rotations
+            ]
 
             optimizer.zero_grad()
             outputs = model(images)  # (B, 64, 13)
@@ -58,7 +74,10 @@ def train(
             losses = []
             matched_labels = []
             for i in range(images.size(0)):
-                sample_losses = [F.cross_entropy(outputs[i], lbl, weight=weights, ignore_index=-1) for lbl in label_rotations[i]]
+                sample_losses = [
+                    F.cross_entropy(outputs[i], lbl, weight=weights, ignore_index=-1)
+                    for lbl in label_rotations[i]
+                ]
                 best_idx = torch.argmin(torch.stack(sample_losses))
                 losses.append(sample_losses[best_idx])
                 matched_labels.append(label_rotations[i][best_idx])
@@ -78,13 +97,17 @@ def train(
 
         avg_train_loss = running_loss / len(dataloader)
         acc_all = correct_all / total_all if total_all > 0 else 0.0
-        acc_no_empty = correct_non_empty / total_non_empty if total_non_empty > 0 else 0.0
+        acc_no_empty = (
+            correct_non_empty / total_non_empty if total_non_empty > 0 else 0.0
+        )
 
         epoch_train_losses.append(avg_train_loss)
         epoch_train_acc_all.append(acc_all)
         epoch_train_acc_no_empty.append(acc_no_empty)
 
-        print(f"Epoch [{epoch+1}/{epochs}] - Loss: {avg_train_loss:.4f} | Acc (all): {acc_all:.4f} | Acc (non-empty): {acc_no_empty:.4f}")
+        print(
+            f"Epoch [{epoch+1}/{epochs}] - Loss: {avg_train_loss:.4f} | Acc (all): {acc_all:.4f} | Acc (non-empty): {acc_no_empty:.4f}"
+        )
 
         if save_model:
             save_path = os.path.join(save_dir, f"epoch{epoch+1}.pth")
@@ -93,7 +116,9 @@ def train(
 
         # --- Evaluate on validation set (if provided) ---
         if val_loader is not None:
-            val_loss, val_acc_all, val_acc_no_empty, _ = evaluate_rotation_invariant(model, val_loader, device=device)
+            val_loss, val_acc_all, val_acc_no_empty, _ = evaluate_rotation_invariant(
+                model, val_loader, device=device
+            )
             epoch_val_losses.append(val_loss)
             epoch_val_acc_all.append(val_acc_all)
             epoch_val_acc_no_empty.append(val_acc_no_empty)
@@ -106,24 +131,24 @@ def train(
 
             # Loss plot
             plt.subplot(1, 2, 1)
-            plt.plot(epoch_train_losses, label='Train Loss')
+            plt.plot(epoch_train_losses, label="Train Loss")
             if val_loader is not None:
-                plt.plot(epoch_val_losses, label='Val Loss')
-            plt.xlabel('Epoch')
-            plt.ylabel('Loss')
-            plt.title('Loss Curve')
+                plt.plot(epoch_val_losses, label="Val Loss")
+            plt.xlabel("Epoch")
+            plt.ylabel("Loss")
+            plt.title("Loss Curve")
             plt.legend()
 
             # Accuracy plot
             plt.subplot(1, 2, 2)
-            plt.plot(epoch_train_acc_all, label='Train Acc (All)')
-            plt.plot(epoch_train_acc_no_empty, label='Train Acc (Non-Empty)')
+            plt.plot(epoch_train_acc_all, label="Train Acc (All)")
+            plt.plot(epoch_train_acc_no_empty, label="Train Acc (Non-Empty)")
             if val_loader is not None:
-                plt.plot(epoch_val_acc_all, label='Val Acc (All)')
-                plt.plot(epoch_val_acc_no_empty, label='Val Acc (Non-Empty)')
-            plt.xlabel('Epoch')
-            plt.ylabel('Accuracy')
-            plt.title('Accuracy Curve')
+                plt.plot(epoch_val_acc_all, label="Val Acc (All)")
+                plt.plot(epoch_val_acc_no_empty, label="Val Acc (Non-Empty)")
+            plt.xlabel("Epoch")
+            plt.ylabel("Accuracy")
+            plt.title("Accuracy Curve")
             plt.legend()
 
             plt.tight_layout()
@@ -146,13 +171,17 @@ def evaluate_rotation_invariant(model, dataloader, device, empty_class_idx=12):
     with torch.no_grad():
         for images, label_rotations in pbar:
             images = images.to(device)
-            label_rotations = [[lbl.to(device) for lbl in rots] for rots in label_rotations]
+            label_rotations = [
+                [lbl.to(device) for lbl in rots] for rots in label_rotations
+            ]
 
             outputs = model(images)
 
             matched_labels = []
             for i in range(outputs.size(0)):
-                losses = [F.cross_entropy(outputs[i], lbl) for lbl in label_rotations[i]]
+                losses = [
+                    F.cross_entropy(outputs[i], lbl) for lbl in label_rotations[i]
+                ]
                 min_idx = torch.argmin(torch.stack(losses))
                 total_loss += losses[min_idx].item()
                 matched_labels.append(label_rotations[i][min_idx])
@@ -187,7 +216,9 @@ def evaluate_rotation_invariant(model, dataloader, device, empty_class_idx=12):
     return avg_loss, acc_all, acc_non_empty, board_error_hist
 
 
-def evaluate_rotation_invariant_visuals(model, dataloader, device, empty_class_idx=12, image_paths=None, label_to_fen=None):
+def evaluate_rotation_invariant_visuals(
+    model, dataloader, device, empty_class_idx=12, image_paths=None, label_to_fen=None
+):
     model.eval()
     total_loss = 0.0
     correct_all = 0
@@ -202,12 +233,16 @@ def evaluate_rotation_invariant_visuals(model, dataloader, device, empty_class_i
     with torch.no_grad():
         for images, label_rotations, image_paths_batch in pbar:
             images = images.to(device)
-            label_rotations = [[lbl.to(device) for lbl in rots] for rots in label_rotations]
+            label_rotations = [
+                [lbl.to(device) for lbl in rots] for rots in label_rotations
+            ]
 
             outputs = model(images)
             matched_labels = []
             for i in range(outputs.size(0)):
-                losses = [F.cross_entropy(outputs[i], lbl) for lbl in label_rotations[i]]
+                losses = [
+                    F.cross_entropy(outputs[i], lbl) for lbl in label_rotations[i]
+                ]
                 min_idx = torch.argmin(torch.stack(losses))
                 total_loss += losses[min_idx].item()
                 matched_labels.append(label_rotations[i][min_idx])
@@ -228,7 +263,11 @@ def evaluate_rotation_invariant_visuals(model, dataloader, device, empty_class_i
                 num_errors = batch_errors[i].item()
                 board_error_hist[num_errors] += 1
 
-                if num_errors == 0 and image_paths is not None and label_to_fen is not None:
+                if (
+                    num_errors == 0
+                    and image_paths is not None
+                    and label_to_fen is not None
+                ):
                     image_path = image_paths_batch[i]
 
                     img = cv2.imread(image_path)
@@ -242,8 +281,14 @@ def evaluate_rotation_invariant_visuals(model, dataloader, device, empty_class_i
                     plt.imshow(img)
                     plt.axis("off")
                     plt.title("✅ Correct Prediction")
-                    plt.figtext(0.5, -0.1, f"GT FEN:   {gt_fen}\nPred FEN: {pred_fen}",
-                                wrap=True, horizontalalignment='center', fontsize=10)
+                    plt.figtext(
+                        0.5,
+                        -0.1,
+                        f"GT FEN:   {gt_fen}\nPred FEN: {pred_fen}",
+                        wrap=True,
+                        horizontalalignment="center",
+                        fontsize=10,
+                    )
                     plt.tight_layout()
                     plt.show()
 
@@ -264,7 +309,19 @@ def evaluate_rotation_invariant_visuals(model, dataloader, device, empty_class_i
 
 
 DEFAULT_ID_TO_PIECE = {
-    0:'P',1:'R',2:'N',3:'B',4:'Q',5:'K', 6:'p',7:'r',8:'n',9:'b',10:'q',11:'k', 12:'1'
+    0: "P",
+    1: "R",
+    2: "N",
+    3: "B",
+    4: "Q",
+    5: "K",
+    6: "p",
+    7: "r",
+    8: "n",
+    9: "b",
+    10: "q",
+    11: "k",
+    12: "1",
 }
 
 
@@ -276,18 +333,18 @@ def _basic_legality_checks(pred_labels_64, id_to_piece=DEFAULT_ID_TO_PIECE):
     arr = np.asarray(pred_labels_64, dtype=int)
     pieces = [id_to_piece[int(v)] for v in arr]
     # counts
-    wK = sum(p=='K' for p in pieces)
-    bK = sum(p=='k' for p in pieces)
-    wP = sum(p=='P' for p in pieces)
-    bP = sum(p=='p' for p in pieces)
+    wK = sum(p == "K" for p in pieces)
+    bK = sum(p == "k" for p in pieces)
+    wP = sum(p == "P" for p in pieces)
+    bP = sum(p == "p" for p in pieces)
     if wK != 1 or bK != 1:
         return False
     # pawn rank rule (ranks from top -> bottom in your labeling)
-    top_rank   = pieces[:8]
-    bottom_rank= pieces[-8:]
-    if any(p=='P' for p in top_rank) or any(p=='P' for p in bottom_rank):
+    top_rank = pieces[:8]
+    bottom_rank = pieces[-8:]
+    if any(p == "P" for p in top_rank) or any(p == "P" for p in bottom_rank):
         return False
-    if any(p=='p' for p in top_rank) or any(p=='p' for p in bottom_rank):
+    if any(p == "p" for p in top_rank) or any(p == "p" for p in bottom_rank):
         return False
     if wP > 8 or bP > 8:
         return False
@@ -310,9 +367,9 @@ def _confusion_and_prf1(gt, pr, num_classes=13):
     tp = np.diag(conf)
     fp = conf.sum(axis=0) - tp
     fn = conf.sum(axis=1) - tp
-    prec = tp / np.maximum(tp+fp, eps)
-    rec  = tp / np.maximum(tp+fn, eps)
-    f1   = 2*prec*rec / np.maximum(prec+rec, eps)
+    prec = tp / np.maximum(tp + fp, eps)
+    rec = tp / np.maximum(tp + fn, eps)
+    f1 = 2 * prec * rec / np.maximum(prec + rec, eps)
     support = conf.sum(axis=1)
     return conf, prec, rec, f1, support
 
@@ -324,15 +381,19 @@ def _ece_reliability(max_probs, correct, n_bins=15):
     """
     max_probs = np.asarray(max_probs)
     correct = np.asarray(correct).astype(np.float32)
-    bins = np.linspace(0, 1, n_bins+1)
+    bins = np.linspace(0, 1, n_bins + 1)
     ece = 0.0
     bin_conf = []
-    bin_acc  = []
-    bin_count= []
+    bin_acc = []
+    bin_count = []
     N = len(max_probs)
     for i in range(n_bins):
-        lo, hi = bins[i], bins[i+1]
-        mask = (max_probs > lo) & (max_probs <= hi) if i>0 else (max_probs >= lo) & (max_probs <= hi)
+        lo, hi = bins[i], bins[i + 1]
+        mask = (
+            (max_probs > lo) & (max_probs <= hi)
+            if i > 0
+            else (max_probs >= lo) & (max_probs <= hi)
+        )
         cnt = mask.sum()
         if cnt == 0:
             bin_conf.append(np.nan)
@@ -340,9 +401,11 @@ def _ece_reliability(max_probs, correct, n_bins=15):
             bin_count.append(0)
             continue
         conf = max_probs[mask].mean()
-        acc  = correct[mask].mean()
+        acc = correct[mask].mean()
         ece += (cnt / N) * abs(acc - conf)
-        bin_conf.append(conf); bin_acc.append(acc); bin_count.append(int(cnt))
+        bin_conf.append(conf)
+        bin_acc.append(acc)
+        bin_count.append(int(cnt))
     return float(ece), np.array(bin_conf), np.array(bin_acc), np.array(bin_count)
 
 
@@ -353,7 +416,7 @@ def evaluate_plus(
     empty_class_idx=12,
     id_to_piece=DEFAULT_ID_TO_PIECE,
     compute_plots=True,
-    title_prefix="Eval"
+    title_prefix="Eval",
 ):
     """
     Rotation-invariant evaluation with rich metrics:
@@ -379,7 +442,7 @@ def evaluate_plus(
     per_board_legality = []
 
     # 8x8 correctness heatmap sums
-    heat_sum = np.zeros((8,8), dtype=np.float64)
+    heat_sum = np.zeros((8, 8), dtype=np.float64)
     heat_cnt = 0
 
     with torch.no_grad():
@@ -392,7 +455,9 @@ def evaluate_plus(
                 images, label_rotations, _ = batch
 
             images = images.to(device)
-            label_rotations = [[lbl.to(device) for lbl in rots] for rots in label_rotations]
+            label_rotations = [
+                [lbl.to(device) for lbl in rots] for rots in label_rotations
+            ]
 
             outputs = model(images)  # (B, 64, 13)
             # softmax for probs
@@ -425,11 +490,11 @@ def evaluate_plus(
             maxp_np = max_prob.detach().cpu().numpy()
 
             # per-square correctness
-            correct_np = (gt_np == pr_np)
+            correct_np = gt_np == pr_np
 
             # top-2 hits mask
             top2_np = top2.detach().cpu().numpy()
-            pr_top2_hit = np.any(top2_np == gt_np[...,None], axis=2)
+            pr_top2_hit = np.any(top2_np == gt_np[..., None], axis=2)
 
             # flatten accumulators
             all_gt.append(gt_np.reshape(-1))
@@ -444,11 +509,13 @@ def evaluate_plus(
 
             # legality per board
             for i in range(B):
-                per_board_legality.append(_basic_legality_checks(pr_np[i], id_to_piece=id_to_piece))
+                per_board_legality.append(
+                    _basic_legality_checks(pr_np[i], id_to_piece=id_to_piece)
+                )
 
             # heatmap accum
             for i in range(B):
-                hm = correct_np[i].reshape(8,8).astype(np.float32)
+                hm = correct_np[i].reshape(8, 8).astype(np.float32)
                 heat_sum += hm
                 heat_cnt += 1
 
@@ -464,12 +531,20 @@ def evaluate_plus(
 
     # square-level acc
     acc_all = (all_gt == all_pr).mean()
-    non_empty_mask = (all_gt != empty_class_idx)
-    acc_non_empty = (all_gt[non_empty_mask] == all_pr[non_empty_mask]).mean() if non_empty_mask.any() else float('nan')
+    non_empty_mask = all_gt != empty_class_idx
+    acc_non_empty = (
+        (all_gt[non_empty_mask] == all_pr[non_empty_mask]).mean()
+        if non_empty_mask.any()
+        else float("nan")
+    )
 
     # top-2 acc
     top2_all = all_pr_top2_hits.mean()
-    top2_non_empty = all_pr_top2_hits[non_empty_mask].mean() if non_empty_mask.any() else float('nan')
+    top2_non_empty = (
+        all_pr_top2_hits[non_empty_mask].mean()
+        if non_empty_mask.any()
+        else float("nan")
+    )
 
     # confusion + PRF1 (all classes)
     conf, prec, rec, f1, support = _confusion_and_prf1(all_gt, all_pr, num_classes=13)
@@ -478,7 +553,7 @@ def evaluate_plus(
     piece_classes = [i for i in range(13) if i != empty_class_idx]
     macro_f1_pieces = np.nanmean(f1[piece_classes])
     macro_prec_pieces = np.nanmean(prec[piece_classes])
-    macro_rec_pieces  = np.nanmean(rec[piece_classes])
+    macro_rec_pieces = np.nanmean(rec[piece_classes])
 
     # board-level stats
     board_errors = np.array(board_errors)
@@ -493,65 +568,66 @@ def evaluate_plus(
     cdf_vals = [float(np.mean(board_errors <= k)) for k in cdf_k]
 
     # calibration (ECE)
-    ece, bin_conf, bin_acc, bin_count = _ece_reliability(all_maxprob, all_correct_flags, n_bins=15)
+    ece, bin_conf, bin_acc, bin_count = _ece_reliability(
+        all_maxprob, all_correct_flags, n_bins=15
+    )
 
     # heatmaps
     heat_avg = heat_sum / max(1, heat_cnt)  # (8,8), fraction correct per square
     # light/dark split: a1 is dark; pattern alternates. Let's assume top-left (row 0, col 0) corresponds to a8 (dark).
-    light_mask = np.fromfunction(lambda r,c: ((r+c)%2==1), (8,8))  # light squares
-    dark_mask  = ~light_mask
+    light_mask = np.fromfunction(
+        lambda r, c: ((r + c) % 2 == 1), (8, 8)
+    )  # light squares
+    dark_mask = ~light_mask
     acc_light = float(heat_avg[light_mask].mean())
-    acc_dark  = float(heat_avg[dark_mask].mean())
+    acc_dark = float(heat_avg[dark_mask].mean())
 
     # legality rate
     legality_rate = float(np.mean(per_board_legality))
 
     # rotation distribution
     rotation_picks = np.array(rotation_picks)
-    rot_hist = {0:int(np.sum(rotation_picks==0)),
-                1:int(np.sum(rotation_picks==1)),
-                2:int(np.sum(rotation_picks==2)),
-                3:int(np.sum(rotation_picks==3))}
-    rot_dist = {k: v/len(rotation_picks) for k,v in rot_hist.items()}
+    rot_hist = {
+        0: int(np.sum(rotation_picks == 0)),
+        1: int(np.sum(rotation_picks == 1)),
+        2: int(np.sum(rotation_picks == 2)),
+        3: int(np.sum(rotation_picks == 3)),
+    }
+    rot_dist = {k: v / len(rotation_picks) for k, v in rot_hist.items()}
 
     # --- package results ---
     results = {
         "avg_loss": float(avg_loss),
-
         "square_acc_all": float(acc_all),
         "square_acc_non_empty": float(acc_non_empty),
         "top2_acc_all": float(top2_all),
         "top2_acc_non_empty": float(top2_non_empty),
-
-        "confusion_matrix": conf,                 # np.array (13,13)
-        "per_class_precision": prec,              # np.array (13,)
-        "per_class_recall": rec,                  # np.array (13,)
-        "per_class_f1": f1,                       # np.array (13,)
-        "per_class_support": support,             # np.array (13,)
+        "confusion_matrix": conf,  # np.array (13,13)
+        "per_class_precision": prec,  # np.array (13,)
+        "per_class_recall": rec,  # np.array (13,)
+        "per_class_f1": f1,  # np.array (13,)
+        "per_class_support": support,  # np.array (13,)
         "macro_prec_pieces": float(macro_prec_pieces),
         "macro_rec_pieces": float(macro_rec_pieces),
         "macro_f1_pieces": float(macro_f1_pieces),
-
         "exact_board_acc": float(exact_board_acc),
-        "board_error_hist": {int(k): int(v) for k,v in zip(*np.unique(board_errors, return_counts=True))},
+        "board_error_hist": {
+            int(k): int(v) for k, v in zip(*np.unique(board_errors, return_counts=True))
+        },
         "board_error_mean": mean_hamming,
         "board_error_median": median_hamming,
         "board_error_q25": q25,
         "board_error_q75": q75,
         "board_error_cdf_k": cdf_k,
         "board_error_cdf_vals": cdf_vals,
-
         "ece": float(ece),
         "reliability_bin_conf": bin_conf,
         "reliability_bin_acc": bin_acc,
         "reliability_bin_count": bin_count,
-
         "heatmap_8x8": heat_avg,
         "acc_light_squares": acc_light,
         "acc_dark_squares": acc_dark,
-
         "legality_rate": legality_rate,
-
         "rotation_hist": rot_hist,
         "rotation_dist": rot_dist,
     }
@@ -559,59 +635,71 @@ def evaluate_plus(
     if compute_plots:
         # 1) Board error histogram (clipped for readability)
         be = np.clip(board_errors, 0, 15)
-        plt.figure(figsize=(6,4))
-        plt.hist(be, bins=np.arange(17)-0.5, rwidth=0.9)
+        plt.figure(figsize=(6, 4))
+        plt.hist(be, bins=np.arange(17) - 0.5, rwidth=0.9)
         plt.title(f"{title_prefix}: Board Errors (clipped at 15)")
-        plt.xlabel("# wrong squares"); plt.ylabel("count")
+        plt.xlabel("# wrong squares")
+        plt.ylabel("count")
         plt.show()
 
         # 2) CDF
-        plt.figure(figsize=(6,4))
-        plt.plot(cdf_k, cdf_vals, marker='o')
+        plt.figure(figsize=(6, 4))
+        plt.plot(cdf_k, cdf_vals, marker="o")
         plt.title(f"{title_prefix}: CDF of Board Errors")
-        plt.xlabel("≤ errors"); plt.ylabel("fraction of boards")
-        plt.grid(True, alpha=0.3); plt.show()
+        plt.xlabel("≤ errors")
+        plt.ylabel("fraction of boards")
+        plt.grid(True, alpha=0.3)
+        plt.show()
 
         # 3) Confusion matrix (small, readable)
-        plt.figure(figsize=(7,6))
-        plt.imshow(conf, interpolation='nearest')
+        plt.figure(figsize=(7, 6))
+        plt.imshow(conf, interpolation="nearest")
         plt.title(f"{title_prefix}: Confusion Matrix (13x13)")
-        plt.xlabel("Predicted"); plt.ylabel("Ground Truth")
-        plt.colorbar(); plt.tight_layout(); plt.show()
+        plt.xlabel("Predicted")
+        plt.ylabel("Ground Truth")
+        plt.colorbar()
+        plt.tight_layout()
+        plt.show()
 
         # 4) Reliability curve
         ok = ~np.isnan(bin_conf) & ~np.isnan(bin_acc)
-        plt.figure(figsize=(6,4))
-        plt.plot(bin_conf[ok], bin_acc[ok], marker='o', label='empirical')
-        plt.plot([0,1],[0,1], linestyle='--', label='ideal')
+        plt.figure(figsize=(6, 4))
+        plt.plot(bin_conf[ok], bin_acc[ok], marker="o", label="empirical")
+        plt.plot([0, 1], [0, 1], linestyle="--", label="ideal")
         sizes = bin_count[ok]
         plt.title(f"{title_prefix}: Reliability (ECE={ece:.3f})")
-        plt.xlabel("confidence"); plt.ylabel("accuracy")
-        plt.legend(); plt.grid(True, alpha=0.3); plt.show()
+        plt.xlabel("confidence")
+        plt.ylabel("accuracy")
+        plt.legend()
+        plt.grid(True, alpha=0.3)
+        plt.show()
 
         # 5) 8x8 heatmap
-        plt.figure(figsize=(5,5))
+        plt.figure(figsize=(5, 5))
         plt.imshow(heat_avg, vmin=0, vmax=1)
         plt.title(f"{title_prefix}: Square Accuracy Heatmap")
         plt.colorbar(label="fraction correct")
-        plt.xticks(range(8)); plt.yticks(range(8))
-        plt.tight_layout(); plt.show()
+        plt.xticks(range(8))
+        plt.yticks(range(8))
+        plt.tight_layout()
+        plt.show()
 
         # 6) Rotation histogram
-        plt.figure(figsize=(5,3))
-        xs = [0,1,2,3]
+        plt.figure(figsize=(5, 3))
+        xs = [0, 1, 2, 3]
         vals = [rot_hist[k] for k in xs]
         plt.bar(xs, vals)
-        plt.xticks(xs, ["0°","90°","180°","270°"])
+        plt.xticks(xs, ["0°", "90°", "180°", "270°"])
         plt.title(f"{title_prefix}: Chosen Rotation Counts")
-        plt.tight_layout(); plt.show()
+        plt.tight_layout()
+        plt.show()
 
     return results
 
 
 if __name__ == "__main__":
     n_tasks = int(os.environ.get("SLURM_NTASKS", 1))
-    task_id = int(os.environ.get('SLURM_PROCID', 0))
+    task_id = int(os.environ.get("SLURM_PROCID", 0))
     local_rank = int(os.environ.get("SLURM_LOCALID", 0))
 
     if torch.cuda.is_available():
@@ -619,26 +707,28 @@ if __name__ == "__main__":
         device = torch.device(f"cuda:{local_rank}")
     else:
         device = torch.device("cpu")
-    print(f"[{task_id}] Process using GPU: {torch.cuda.get_device_name(local_rank) if torch.cuda.is_available() else 'CPU'}")
+    print(
+        f"[{task_id}] Process using GPU: {torch.cuda.get_device_name(local_rank) if torch.cuda.is_available() else 'CPU'}"
+    )
 
-    # Load Configuration 
-    with open('config.json', 'r') as f:
+    # Load Configuration
+    with open("config.json", "r") as f:
         config = json.load(f)
 
-    save_dir = get_config_path(config, 'model_save_dir')
+    save_dir = get_config_path(config, "model_save_dir")
 
-    # Initialize Data and Model 
+    # Initialize Data and Model
     train_loader = get_train_loader(config, batch_size=16)
     val_loader = get_val_loader(config, batch_size=16)
 
     model = CustomChessCNN_v3(num_classes=13, dropout=0.3).to(device)
-    
+
     train(
-        model=model, 
-        dataloader=train_loader, 
-        device=device, 
-        epochs=15, 
-        save_model=True, 
-        save_dir=save_dir, 
-        val_loader=val_loader
+        model=model,
+        dataloader=train_loader,
+        device=device,
+        epochs=15,
+        save_model=True,
+        save_dir=save_dir,
+        val_loader=val_loader,
     )

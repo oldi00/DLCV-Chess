@@ -1,6 +1,8 @@
 tempCodeRunnerFile*
 data/chessred2k/*
 data/annotations.json
+*.onnx
+*.pth
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

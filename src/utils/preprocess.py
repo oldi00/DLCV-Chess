@@ -18,35 +18,59 @@ def get_config_path(config, key):
         return config.get(f"cluster_{key}", config.get(key))
     return config.get(key)
 
+
 # =============
 # Preprocessing
 # =============
 
 id_to_piece = {
-    0: 'P', 1: 'R', 2: 'N', 3: 'B', 4: 'Q', 5: 'K',
-    6: 'p', 7: 'r', 8: 'n', 9: 'b', 10: 'q', 11: 'k',
-    12: '1'
+    0: "P",
+    1: "R",
+    2: "N",
+    3: "B",
+    4: "Q",
+    5: "K",
+    6: "p",
+    7: "r",
+    8: "n",
+    9: "b",
+    10: "q",
+    11: "k",
+    12: "1",
 }
 
 piece_to_label = {
-    'P': 0, 'R': 1, 'N': 2, 'B': 3, 'Q': 4, 'K': 5,
-    'p': 6, 'r': 7, 'n': 8, 'b': 9, 'q': 10, 'k': 11
+    "P": 0,
+    "R": 1,
+    "N": 2,
+    "B": 3,
+    "Q": 4,
+    "K": 5,
+    "p": 6,
+    "r": 7,
+    "n": 8,
+    "b": 9,
+    "q": 10,
+    "k": 11,
 }
 
 
 def converting_annotations_to_fen(data_dir=None, annotations_data=None):
-    image_id_to_path = {img['id']: os.path.join(data_dir, img['path']) for img in annotations_data['images']}
+    image_id_to_path = {
+        img["id"]: os.path.join(data_dir, img["path"])
+        for img in annotations_data["images"]
+    }
     image_to_pieces = defaultdict(list)
 
-    for ann in annotations_data['annotations']['pieces']:
-        image_to_pieces[ann['image_id']].append(ann)
+    for ann in annotations_data["annotations"]["pieces"]:
+        image_to_pieces[ann["image_id"]].append(ann)
 
     return image_id_to_path, image_to_pieces
 
 
-def fen_to_label_vector(fen, empty_char='0'):
+def fen_to_label_vector(fen, empty_char="0"):
     squares = []
-    for row in fen.split('/'):
+    for row in fen.split("/"):
         for ch in row:
             if ch == empty_char:
                 squares.append(12)
@@ -54,31 +78,33 @@ def fen_to_label_vector(fen, empty_char='0'):
                 squares.extend([12] * int(ch))  # for compressed digits like 8
             else:
                 squares.append(piece_to_label[ch])
-    assert len(squares) == 64, f"Expected 64 squares but got {len(squares)} in FEN: {fen}"
+    assert (
+        len(squares) == 64
+    ), f"Expected 64 squares but got {len(squares)} in FEN: {fen}"
     return torch.tensor(squares, dtype=torch.long)
 
 
 # convert image piece list to FEN
 def pieces_to_fen(piece_list):
-    board = [['1'] * 8 for _ in range(8)]
-    pos_to_index = lambda pos: (8 - int(pos[1]), ord(pos[0]) - ord('a'))
+    board = [["1"] * 8 for _ in range(8)]
+    pos_to_index = lambda pos: (8 - int(pos[1]), ord(pos[0]) - ord("a"))
 
     for piece in piece_list:
-        row, col = pos_to_index(piece['chessboard_position'])
-        board[row][col] = id_to_piece[piece['category_id']]
+        row, col = pos_to_index(piece["chessboard_position"])
+        board[row][col] = id_to_piece[piece["category_id"]]
 
     fen_rows = []
     for row in board:
-        fen_row = ''
+        fen_row = ""
         count = 0
         for cell in row:
-            if cell == '1':
-                fen_row += '0'
+            if cell == "1":
+                fen_row += "0"
             else:
                 fen_row += cell
         fen_rows.append(fen_row)
 
-    return '/'.join(fen_rows)
+    return "/".join(fen_rows)
 
 
 def label_vector_to_fen(label_vector):
@@ -90,8 +116,8 @@ def label_vector_to_fen(label_vector):
 
     fen_rows = []
     for i in range(0, 64, 8):
-        row = label_vector[i:i+8]
-        fen_row = ''
+        row = label_vector[i : i + 8]
+        fen_row = ""
         empty_count = 0
 
         for val in row:
@@ -108,7 +134,7 @@ def label_vector_to_fen(label_vector):
 
         fen_rows.append(fen_row)
 
-    return '/'.join(fen_rows)
+    return "/".join(fen_rows)
 
 
 def detect_board_corners(img):
@@ -155,8 +181,15 @@ def draw_corners(img, corners):
     for i, pt in enumerate(corners):
         pt_int = tuple(np.int32(pt))
         cv2.circle(img_copy, pt_int, 14, (0, 0, 255), -1)
-        cv2.putText(img_copy, labels[i], (pt_int[0] + 10, pt_int[1] - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX, 2.0, (255, 0, 0), 3)
+        cv2.putText(
+            img_copy,
+            labels[i],
+            (pt_int[0] + 10, pt_int[1] - 10),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            2.0,
+            (255, 0, 0),
+            3,
+        )
     for i in range(4):
         pt1 = tuple(np.int32(corners[i]))
         pt2 = tuple(np.int32(corners[(i + 1) % 4]))
@@ -166,12 +199,15 @@ def draw_corners(img, corners):
 
 def warp_board(img, corners, output_size=400):
     src_pts = order_points_robust(corners)
-    dst_pts = np.array([
-        [0, 0],
-        [output_size-1, 0],
-        [output_size-1, output_size-1],
-        [0, output_size-1]
-    ], dtype="float32")
+    dst_pts = np.array(
+        [
+            [0, 0],
+            [output_size - 1, 0],
+            [output_size - 1, output_size - 1],
+            [0, output_size - 1],
+        ],
+        dtype="float32",
+    )
 
     M = cv2.getPerspectiveTransform(src_pts, dst_pts)
     warped = cv2.warpPerspective(img, M, (output_size, output_size))
@@ -184,7 +220,7 @@ def slice_squares(warped, square_size=50):
         for col in range(8):
             x1 = col * square_size
             y1 = row * square_size
-            square = warped[y1:y1 + square_size, x1:x1 + square_size]
+            square = warped[y1 : y1 + square_size, x1 : x1 + square_size]
             squares.append(square)
     return squares
 
@@ -210,21 +246,21 @@ def preprocess_chessboard(image_path, output_size=400, display=True):
             plt.subplot(1, 4, i + 1)
             img_disp = images[i]
             if len(img_disp.shape) == 2:
-                plt.imshow(img_disp, cmap='gray')
+                plt.imshow(img_disp, cmap="gray")
             else:
                 img_disp = cv2.cvtColor(img_disp, cv2.COLOR_BGR2RGB)
                 plt.imshow(img_disp)
             plt.title(titles[i], fontsize=70)
-            plt.axis('off')
+            plt.axis("off")
         plt.tight_layout()
         plt.show()
 
     return warped, squares
 
 
-def expand_fen(fen, empty_char='0'):
+def expand_fen(fen, empty_char="0"):
     board = []
-    for row in fen.split('/'):
+    for row in fen.split("/"):
         expanded_row = []
         for ch in row:
             if ch.isdigit() and ch != empty_char:
@@ -235,8 +271,8 @@ def expand_fen(fen, empty_char='0'):
     return board
 
 
-def compress_fen_row(row, empty_char='0'):
-    compressed = ''
+def compress_fen_row(row, empty_char="0"):
+    compressed = ""
     count = 0
     for ch in row:
         if ch == empty_char:
@@ -251,24 +287,24 @@ def compress_fen_row(row, empty_char='0'):
     return compressed
 
 
-def board_to_fen(board, empty_char='0'):
-    return '/'.join([compress_fen_row(row, empty_char=empty_char) for row in board])
+def board_to_fen(board, empty_char="0"):
+    return "/".join([compress_fen_row(row, empty_char=empty_char) for row in board])
 
 
-def rotate_fen_90(fen, empty_char='0'):
+def rotate_fen_90(fen, empty_char="0"):
     board = expand_fen(fen, empty_char)
     rotated = list(zip(*board[::-1]))
     rotated = [list(row) for row in rotated]
     return board_to_fen(rotated, empty_char)
 
 
-def rotate_fen_180(fen, empty_char='0'):
+def rotate_fen_180(fen, empty_char="0"):
     board = expand_fen(fen, empty_char)
     rotated = [row[::-1] for row in board[::-1]]
     return board_to_fen(rotated, empty_char)
 
 
-def rotate_fen_270(fen, empty_char='0'):
+def rotate_fen_270(fen, empty_char="0"):
     board = expand_fen(fen, empty_char)
     rotated = list(zip(*board))[::-1]
     rotated = [list(row) for row in rotated]
@@ -279,7 +315,11 @@ def rotate_fen_270(fen, empty_char='0'):
 # Bulk Preprocess
 # ================
 
-def preprocess_chessred_train(annotations="G:/Meine Ablage/DLCV/annotations.json", save_dir="G:/Meine Ablage/DLCV/ChessReD_Hough"):
+
+def preprocess_chessred_train(
+    annotations="G:/Meine Ablage/DLCV/annotations.json",
+    save_dir="G:/Meine Ablage/DLCV/ChessReD_Hough",
+):
     # VERY IMPORTANT, SAVE WARPED CHESSRES2K IMAGES to DRIVE
     # Create save directory if it doesn't exist
     os.makedirs(save_dir, exist_ok=True)
@@ -292,9 +332,9 @@ def preprocess_chessred_train(annotations="G:/Meine Ablage/DLCV/annotations.json
     invalid_warp_ids = []
 
     # train_chessred2k_ids = annotations['splits']['chessred2k']['train']['image_ids']
-    chessred_ids = annotations['splits']['train']['image_ids']
+    chessred_ids = annotations["splits"]["train"]["image_ids"]
     image_id_to_path, image_to_pieces = converting_annotations_to_fen()
-    
+
     for i in tqdm(chessred_ids, desc="Processing Images"):
         path = image_id_to_path.get(i)
         if path is None:
@@ -319,9 +359,8 @@ def preprocess_chessred_train(annotations="G:/Meine Ablage/DLCV/annotations.json
             y.append(fen)
             valid_ids.append(i)
 
-        except Exception as e:
+        except Exception:
             error_ids.append(i)
-
 
     with open("G:/Meine Ablage/DLCV/chessred_hough.pkl", "wb") as f:
         pickle.dump((X, y), f)
@@ -331,7 +370,10 @@ def preprocess_chessred_train(annotations="G:/Meine Ablage/DLCV/annotations.json
     print("⚠️ Total invalid warped:", len(invalid_warp_ids))
 
 
-def preprocess_chessred_val(annotations="G:/Meine Ablage/DLCV/annotations.json", save_dir="G:/Meine Ablage/DLCV/ChessReD_Hough"):
+def preprocess_chessred_val(
+    annotations="G:/Meine Ablage/DLCV/annotations.json",
+    save_dir="G:/Meine Ablage/DLCV/ChessReD_Hough",
+):
     X = []  # Paths to warped images
     y = []  # Labels (4 FEN rotations each)
 
@@ -340,7 +382,7 @@ def preprocess_chessred_val(annotations="G:/Meine Ablage/DLCV/annotations.json",
     invalid_warp_ids = []
 
     # train_chessred2k_ids = annotations['splits']['chessred2k']['train']['image_ids']
-    chessred_ids = annotations['splits']['val']['image_ids']
+    chessred_ids = annotations["splits"]["val"]["image_ids"]
     image_id_to_path, image_to_pieces = converting_annotations_to_fen()
 
     for i in tqdm(chessred_ids, desc="Processing Images"):
@@ -367,19 +409,21 @@ def preprocess_chessred_val(annotations="G:/Meine Ablage/DLCV/annotations.json",
             y.append(fen)
             valid_ids.append(i)
 
-        except Exception as e:
+        except Exception:
             error_ids.append(i)
-
 
     with open("G:/Meine Ablage/DLCV/chessred_hough_val.pkl", "wb") as f:
         pickle.dump((X, y), f)
-    
+
     print("✅ Total valid images:", len(valid_ids))
     print("❌ Total errors:", len(error_ids))
     print("⚠️ Total invalid warped:", len(invalid_warp_ids))
 
 
-def preprocess_chessred_test(annotations="G:/Meine Ablage/DLCV/annotations.json", save_dir="G:/Meine Ablage/DLCV/ChessReD_Hough"):
+def preprocess_chessred_test(
+    annotations="G:/Meine Ablage/DLCV/annotations.json",
+    save_dir="G:/Meine Ablage/DLCV/ChessReD_Hough",
+):
     X = []  # Paths to warped images
     y = []  # Labels (4 FEN rotations each)
 
@@ -388,7 +432,7 @@ def preprocess_chessred_test(annotations="G:/Meine Ablage/DLCV/annotations.json"
     invalid_warp_ids = []
 
     # train_chessred2k_ids = annotations['splits']['chessred2k']['train']['image_ids']
-    chessred_ids = annotations['splits']['test']['image_ids']
+    chessred_ids = annotations["splits"]["test"]["image_ids"]
     image_id_to_path, image_to_pieces = converting_annotations_to_fen()
 
     for i in tqdm(chessred_ids, desc="Processing Images"):
@@ -418,7 +462,6 @@ def preprocess_chessred_test(annotations="G:/Meine Ablage/DLCV/annotations.json"
         except Exception as _:
             error_ids.append(i)
 
-
     with open("G:/Meine Ablage/DLCV/chessred_hough_test.pkl", "wb") as f:
         pickle.dump((X, y), f)
 
@@ -429,13 +472,13 @@ def preprocess_chessred_test(annotations="G:/Meine Ablage/DLCV/annotations.json"
 
 
 def preprocess_and_save_splits(
-        splits_to_process=["train", "val", "test"],
-        annotations_path="G:/Meine Ablage/DLCV/annotations.json",
-        data_dir="G:/Meine Ablage/DLCV/ChessReD",
-        save_dir="G:/Meine Ablage/DLCV/ChessReD_Hough"
-        ):
+    splits_to_process=["train", "val", "test"],
+    annotations_path="G:/Meine Ablage/DLCV/annotations.json",
+    data_dir="G:/Meine Ablage/DLCV/ChessReD",
+    save_dir="G:/Meine Ablage/DLCV/ChessReD_Hough",
+):
     """
-    Preprocesses chessboard images, warps them, and saves both the images and 
+    Preprocesses chessboard images, warps them, and saves both the images and
     labels (FEN) into pickle files for specified splits.
     """
     os.makedirs(save_dir, exist_ok=True)
@@ -445,14 +488,16 @@ def preprocess_and_save_splits(
 
     for split in splits_to_process:
         print(f"\n🚀 Processing Split: {split.upper()}")
-        
+
         X = []  # Paths to warped images
         y = []  # FEN labels
         valid_ids, error_ids, invalid_warp_ids = [], [], []
 
-        image_id_to_path, image_to_pieces = converting_annotations_to_fen(data_dir=data_dir, annotations=annotations)
+        image_id_to_path, image_to_pieces = converting_annotations_to_fen(
+            data_dir=data_dir, annotations=annotations
+        )
         # Access IDs for the current split
-        chessred_ids = annotations['splits'][split]['image_ids']
+        chessred_ids = annotations["splits"][split]["image_ids"]
 
         for i in tqdm(chessred_ids, desc=f"Warping {split}"):
             path = image_id_to_path.get(i)
@@ -463,7 +508,7 @@ def preprocess_and_save_splits(
             try:
                 # Core Vision Logic
                 warped, _ = preprocess_chessboard(path, display=False)
-                
+
                 # Validation check (ensure image isn't blank or failed warp)
                 if warped is None or np.std(warped) < 50:
                     invalid_warp_ids.append(i)
@@ -492,7 +537,9 @@ def preprocess_and_save_splits(
         with open(pkl_path, "wb") as f:
             pickle.dump((X, y), f)
 
-        print(f"✅ {split} complete. Valid: {len(valid_ids)} | Errors: {len(error_ids)} | Invalid Warps: {len(invalid_warp_ids)}")
+        print(
+            f"✅ {split} complete. Valid: {len(valid_ids)} | Errors: {len(error_ids)} | Invalid Warps: {len(invalid_warp_ids)}"
+        )
         print(f"📦 Saved to: {pkl_filename}")
 
 
@@ -502,7 +549,11 @@ def fast_rebuild_pickles(config):
     Automatically switches between Local and Cluster storage.
     """
     # Resolve Paths from Config
-    base_dir = get_config_path(config, "preprocessed_output_dir").split("ChessReD_Hough")[0] # Root DLCV dir
+    base_dir = get_config_path(config, "preprocessed_output_dir").split(
+        "ChessReD_Hough"
+    )[
+        0
+    ]  # Root DLCV dir
     save_dir = get_config_path(config, "preprocessed_output_dir")
     annotations_path = get_config_path(config, "annotation_file")
 
@@ -519,13 +570,13 @@ def fast_rebuild_pickles(config):
     print(f"📂 Found {len(existing_files)} images in {save_dir}")
 
     image_to_pieces = defaultdict(list)
-    for ann in annotations['annotations']['pieces']:
-        image_to_pieces[ann['image_id']].append(ann)
+    for ann in annotations["annotations"]["pieces"]:
+        image_to_pieces[ann["image_id"]].append(ann)
 
     for split in ["train", "val", "test"]:
         print(f"\n⚡ Processing {split.upper()} split...")
         X, y = [], []
-        image_ids = annotations['splits'][split]['image_ids']
+        image_ids = annotations["splits"][split]["image_ids"]
 
         for i in tqdm(image_ids):
             filename = f"{i}.png"
@@ -543,14 +594,15 @@ def fast_rebuild_pickles(config):
         suffix = f"_{split}" if split != "train" else ""
         output_filename = f"chessred_hough{suffix}.pkl"
         output_path = os.path.join(base_dir, output_filename)
-        
+
         with open(output_path, "wb") as f:
             pickle.dump((X, y), f)
-        
+
         print(f"✅ Created {output_filename} with {len(X)} entries.")
+
 
 if __name__ == "__main__":
     # Load config to pass to the rebuild function
-    with open('config.json', 'r') as f:
+    with open("config.json", "r") as f:
         config_data = json.load(f)
     fast_rebuild_pickles(config_data)
