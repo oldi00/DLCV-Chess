@@ -120,6 +120,11 @@ def draw_points(img, points, color=(250, 20, 50)):
     return img
 
 
+def draw_contours(img, contours):
+
+    return cv2.drawContours(img.copy(), contours, -1, (255, 0, 0), 2)
+
+
 def plot_histograms(plot_title, *histograms, cols=2):
 
     n = len(histograms)

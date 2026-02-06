@@ -37,6 +37,9 @@ def detect_board(img_path, debug=False):
     # Resize to 320px for speed; we scale coordinates back up later.
     img_resized, scale = utils.resize_image(img, target_width=320)
 
+    if debug:
+        debug_info["img_resized"] = img_resized
+
     img_foreground = remove(img_resized, session=SESSION)
     alpha = img_foreground[:, :, 3]
 
