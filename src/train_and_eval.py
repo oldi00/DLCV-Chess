@@ -1,7 +1,6 @@
 import os
 import torch
 import numpy as np
-import matplotlib as plt
 import collections
 import matplotlib.pyplot as plt
 import cv2
@@ -22,7 +21,7 @@ def train(
     model,
     dataloader,
     device,
-    epochs=15,
+    epochs=35,
     save_model=True,
     save_dir=None,
     plot_loss=True,
@@ -306,23 +305,6 @@ def evaluate_rotation_invariant_visuals(
         print(f"  Boards with {k:2d} wrong squares: {board_error_hist[k]}")
 
     return avg_loss, acc_all, acc_non_empty, board_error_hist
-
-
-DEFAULT_ID_TO_PIECE = {
-    0: "P",
-    1: "R",
-    2: "N",
-    3: "B",
-    4: "Q",
-    5: "K",
-    6: "p",
-    7: "r",
-    8: "n",
-    9: "b",
-    10: "q",
-    11: "k",
-    12: "1",
-}
 
 
 def _basic_legality_checks(pred_labels_64, id_to_piece=DEFAULT_ID_TO_PIECE):
@@ -702,6 +684,8 @@ if __name__ == "__main__":
     task_id = int(os.environ.get("SLURM_PROCID", 0))
     local_rank = int(os.environ.get("SLURM_LOCALID", 0))
 
+    print(n_tasks, task_id, local_rank)
+
     if torch.cuda.is_available():
         torch.cuda.set_device(local_rank)
         device = torch.device(f"cuda:{local_rank}")
@@ -727,7 +711,7 @@ if __name__ == "__main__":
         model=model,
         dataloader=train_loader,
         device=device,
-        epochs=15,
+        epochs=35,
         save_model=True,
         save_dir=save_dir,
         val_loader=val_loader,

@@ -125,6 +125,8 @@ def get_train_loader(config, batch_size=16):
         train_dataset, batch_size=batch_size, shuffle=True, collate_fn=custom_collate
     )
 
+    print(f"Total images train loader {len(train_dataset)}")
+
     return train_loader
 
 
@@ -147,7 +149,7 @@ def get_val_loader(config, batch_size=16):
         val_dataset, batch_size=batch_size, shuffle=True, collate_fn=custom_collate
     )
 
-    print(f"Total images: {len(val_dataset)}")
+    print(f"Total images val loader: {len(val_dataset)}")
 
     return val_loader
 
@@ -170,7 +172,7 @@ def get_test_loader(config, batch_size=16):
         X_loaded, y_loaded, transform=data_transform
     )
     test_loader = DataLoader(
-        test_dataset, batch_size=16, shuffle=True, collate_fn=custom_collateTEST
+        test_dataset, batch_size=batch_size, shuffle=True, collate_fn=custom_collateTEST
     )
     print(f"Total images: {len(test_dataset)}")
 

@@ -61,23 +61,13 @@ def predict_chess_board(image_path):
         return None
     except json.JSONDecodeError:
         print("[Backend] Fehler: Die Antwort der EXE war kein gültiges JSON.")
-        print(f"Empfangen: {json_str[:100]}...")  # Zeige die ersten 100 Zeichen
+        print(f"Empfangen: {json_str[:100]}...")
         return None
 
 
 if __name__ == "__main__":
-    # Dummy-Aufruf zum Testen
-
-    # Sicherstellen, dass wir eine Datei zum Testen haben
     if not os.path.exists(TEST_IMAGE):
         print(f"Bitte lege ein Bild namens '{TEST_IMAGE}' in diesen Ordner.")
     else:
         probs = predict_chess_board(TEST_IMAGE)
-
-        if probs:
-            print("\n[Backend] Erfolg! Daten empfangen.")
-            print(
-                f"Dimensionen: {len(probs)} Zeilen (Felder), {len(probs[0])} Spalten (Klassen)"
-            )
-            # Beispiel: Wahrscheinlichkeiten für das erste Feld (A1)
-            print(f"Wahrscheinlichkeiten Feld 0 (A1): {probs[0]}")
+        print(probs)

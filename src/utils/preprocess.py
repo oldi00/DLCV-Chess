@@ -5,12 +5,13 @@ import os
 import pickle
 import torch
 import json
+from pathlib import Path
 
 from tqdm import tqdm
 from collections import defaultdict
 
 
-# --- Environment Detection Helper ---
+# Detect if cluster or not.
 def get_config_path(config, key):
     """Detects if running on cluster and resolves the correct path."""
     on_cluster = "SLURM_JOB_ID" in os.environ
@@ -87,7 +88,9 @@ def fen_to_label_vector(fen, empty_char="0"):
 # convert image piece list to FEN
 def pieces_to_fen(piece_list):
     board = [["1"] * 8 for _ in range(8)]
-    pos_to_index = lambda pos: (8 - int(pos[1]), ord(pos[0]) - ord("a"))
+
+    def pos_to_index(pos):
+        return (8 - int(pos[1]), ord(pos[0]) - ord("a"))
 
     for piece in piece_list:
         row, col = pos_to_index(piece["chessboard_position"])
@@ -96,7 +99,6 @@ def pieces_to_fen(piece_list):
     fen_rows = []
     for row in board:
         fen_row = ""
-        count = 0
         for cell in row:
             if cell == "1":
                 fen_row += "0"
@@ -312,7 +314,7 @@ def rotate_fen_270(fen, empty_char="0"):
 
 
 # ================
-# Bulk Preprocess
+# Preprocess
 # ================
 
 
@@ -467,7 +469,7 @@ def preprocess_chessred_test(
 
 
 # =======================
-# ALL IN ONE - Preprocess
+# Bulk Preprocess
 # =======================
 
 
@@ -487,7 +489,7 @@ def preprocess_and_save_splits(
         annotations = json.load(f)
 
     for split in splits_to_process:
-        print(f"\n🚀 Processing Split: {split.upper()}")
+        print(f"\nProcessing Split: {split.upper()}")
 
         X = []  # Paths to warped images
         y = []  # FEN labels
@@ -506,17 +508,19 @@ def preprocess_and_save_splits(
                 continue
 
             try:
-                # Core Vision Logic
                 warped, _ = preprocess_chessboard(path, display=False)
 
-                # Validation check (ensure image isn't blank or failed warp)
                 if warped is None or np.std(warped) < 50:
                     invalid_warp_ids.append(i)
                     continue
 
                 # Save warped image to Drive
                 img_save_path = os.path.join(save_dir, f"{i}.png")
-                # cv2.imwrite(img_save_path, warped)
+
+                if os.path.exists(path=img_save_path):
+                    print(f"File {i}.png already exists!")
+                else:
+                    cv2.imwrite(img_save_path, warped)
 
                 # Get and store FEN
                 pieces = image_to_pieces[i]
@@ -529,7 +533,7 @@ def preprocess_and_save_splits(
             except Exception:
                 error_ids.append(i)
 
-        # Handle the specific naming convention you used
+        # Handle the specific naming convention
         suffix = f"_{split}" if split != "train" else ""
         pkl_filename = f"chessred_hough{suffix}.pkl"
         pkl_path = os.path.join("G:/Meine Ablage/DLCV", pkl_filename)
@@ -601,8 +605,150 @@ def fast_rebuild_pickles(config):
         print(f"✅ Created {output_filename} with {len(X)} entries.")
 
 
+def preprocess_and_save_splits_non_chessred_data(
+    split_percentages=[70, 20, 10],
+    data_dir="G:/Meine Ablage/DLCV/ChessReD",
+    save_dir="G:/Meine Ablage/DLCV/ChessReD_Hough",
+):
+    """
+    Preprocesses chessboard images, warps them, and saves both the images and
+    labels (FEN) into pickle files for specified splits.
+    """
+
+    os.makedirs(save_dir, exist_ok=True)
+
+    # TODO: Just count .png and .jpg files.
+    files_amt = len(
+        [
+            entry
+            for entry in os.listdir(data_dir)
+            if os.path.isfile(os.path.join(data_dir, entry))
+        ]
+    )
+    invalid_warp_ids = []
+    valid_warp_ids = []
+
+    for percentage in split_percentages:
+        X = []  # Paths to warped images
+        y = []  # FEN labels
+
+        split_amt = int(files_amt * percentage / 100)
+        split = os.listdir(data_dir)[split_amt]
+
+        for i in split:
+            path = os.path.join(data_dir, i)
+            warped, _ = preprocess_chessboard(path, display=False)
+
+            if warped is None or np.std(warped) < 50:
+                invalid_warp_ids.append(i)
+                continue
+
+            # Save warped image to Drive
+            img_save_path = os.path.join(save_dir, f"{i}.png")
+
+            if os.path.exists(path=img_save_path):
+                print(f"File {i}.png already exists!")
+            else:
+                cv2.imwrite(img_save_path, warped)
+
+            # Get and store FEN
+            fen = []  # TODO: Get the fen string
+
+            X.append(img_save_path)
+            y.append(fen)
+            valid_warp_ids.append(i)
+
+
+def preprocess_and_save_splits_no_preprocess(
+    split_percentages=[70, 20, 10],
+    data_dir="G:/Meine Ablage/DLCV/ChessReD",
+    save_dir="G:/Meine Ablage/DLCV/ChessReD_Hough",
+):
+    """
+    Preprocesses chessboard images, warps them, and saves both the images and
+    labels (FEN) into pickle files for specified splits.
+    """
+
+    os.makedirs(save_dir, exist_ok=True)
+
+    # TODO: Just count .png and .jpg files.
+    files_amt = len(
+        [
+            entry
+            for entry in os.listdir(data_dir)
+            if os.path.isfile(os.path.join(data_dir, entry))
+        ]
+    )
+    valid_warp_ids = []
+
+    if len(split_percentages) == 3:
+        model_splits = ["train", "val", "test"]
+    else:
+        model_splits = ["train", "test"]
+
+    for percentage, model_split in zip(split_percentages, model_splits):
+        X = []  # Paths to warped images
+        y = []  # FEN labels
+
+        split_amt = int(files_amt * percentage / 100)
+
+        for i in range(split_amt):
+            # Save image to Drive
+            img_save_path = os.path.join(save_dir, f"{model_split}", f"{i}.png")
+            img = os.listdir(data_dir)[i]
+
+            if os.path.exists(path=img_save_path):
+                print(f"File {i}.png already exists in {model_split}!")
+            else:
+                cv2.imwrite(img_save_path, img)
+
+            # Get and store FEN
+            fen = []  # TODO: Get the fen string
+
+            X.append(img_save_path)
+            y.append(fen)
+            valid_warp_ids.append(i)
+
+
+def create_pickle(base_dir, json_file_name, split_ratios=[0.7, 0.2, 0.1]):
+    base_path = Path(base_dir)
+    json_path = base_path / json_file_name
+
+    with open(json_path, "r") as f:
+        label_data = json.load(f)
+
+    data_pairs = []
+    files = sorted([f for f in os.listdir(base_path) if f.endswith((".jpg", ".png"))])
+    print(f"{len(files)} images in the folder.")
+
+    for file_name in files:
+        if file_name in label_data:
+            file_path = str(base_path / file_name)
+            fen = label_data[file_name]["fen"]
+            data_pairs.append((file_path, fen))
+
+    total = len(data_pairs)
+    train_end = int(total * split_ratios[0])
+    val_end = int(total * (split_ratios[0] + split_ratios[1]))
+
+    splits = {
+        "train": data_pairs[:train_end],
+        "val": data_pairs[train_end:val_end],
+        "test": data_pairs[val_end:],
+    }
+
+    for split_name, pairs in splits.items():
+        X = [pair[0] for pair in pairs]
+        y = [pair[1] for pair in pairs]
+        pkl_save_path = base_path / f"unity_{split_name}_data.pkl"
+
+        with open(pkl_save_path, "wb") as f:
+            pickle.dump((X, y), f)
+
+        print(f"📦 Saved {len(X)} samples to: {pkl_save_path}")
+
+
 if __name__ == "__main__":
-    # Load config to pass to the rebuild function
-    with open("config.json", "r") as f:
-        config_data = json.load(f)
-    fast_rebuild_pickles(config_data)
+    base_dir = "G:\\Meine Ablage\\DLCV\\Synthetic Data (Unity)"
+    json_file_name = "metadata.json"
+    create_pickle(base_dir, json_file_name)

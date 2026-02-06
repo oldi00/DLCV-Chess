@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#SBATCH --job-name=DLCV_Chess_Project       # Name of your job
+#SBATCH --job-name=DLCV_Chess_Project      # Name of your job
 #SBATCH --partition=gpu                    # Target the GPU partition
 #SBATCH --nodes=1                          # Allocate 1 full node
 #SBATCH --ntasks=8                         # Number of processes to run
@@ -27,5 +27,4 @@ conda activate "$CONDA_ENV"
 export NCCL_DEBUG=INFO
 export PYTHONFAULTHANDLER=1
 
-# srun will automatically launch the script 8 times (as per --ntasks=8)
 srun python3 "$ROOT_DIR/src/train_and_eval.py"

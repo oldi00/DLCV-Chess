@@ -4,19 +4,19 @@
   "data_dir": "G:/Meine Ablage/DLCV/ChessReD",
   "annotation_file": "G:/Meine Ablage/DLCV/annotations.json",
   "preprocessed_output_dir": "G:/Meine Ablage/DLCV/ChessReD_Hough",
-  "train_pickle_path": "G:/Meine Ablage/DLCV/chessred_hough.pkl",
-  "val_pickle_path": "G:/Meine Ablage/DLCV/chessred_hough_val.pkl",
-  "test_pickle_path": "G:/Meine Ablage/DLCV/chessred_hough_test.pkl",
+  "train_pickle_path": "G:/Meine Ablage/DLCV/Synthetic Data (Unity)/unity_train_data.pkl",
+  "val_pickle_path": "G:/Meine Ablage/DLCV/Synthetic Data (Unity)/unity_val_data.pkl",
+  "test_pickle_path": "G:/Meine Ablage/DLCV/Synthetic Data (Unity)/unity_test_data.pkl",
   "real_image_dir": "G:/Meine Ablage/DLCV/New Photos/Overhead",
   "real_labels_json": "G:/Meine Ablage/DLCV/real_labels.json",
   "real_board_pickle_path": "G:/Meine Ablage/DLCV/RealBoard_Overhead_Hough.pkl",
   "model_save_dir": "G:/Meine Ablage/DLCV/customV5-residuals-dropout-chessred-full",
   "best_model_weights": "G:/Meine Ablage/DLCV/customV5-residuals-dropout-chessred-full/epoch35.pth",
 
-  "cluster_preprocessed_output_dir": "/scratch/vihps/vihps01/ChessReD_Hough",
-  "cluster_annotation_file": "/scratch/vihps/vihps01/chessred/annotations.json",
-  "cluster_model_save_dir": "/scratch/vihps/vihps01/chessred/models",
-  "cluster_train_pickle_path": "/scratch/vihps/vihps01/chessred/chessred_hough.pkl",
-  "cluster_val_pickle_path": "/scratch/vihps/vihps01/chessred/chessred_hough_val.pkl",
-  "cluster_test_pickle_path": "/scratch/vihps/vihps01/chessred/chessred_hough_test.pkl"
+  "cluster_preprocessed_images_dir": "/scratch/vihps/vihps01/Synthetic Data (Unity)",
+  "cluster_annotation_file": "/scratch/vihps/vihps01/unity/metadata.json",
+  "cluster_model_save_dir": "/scratch/vihps/vihps01/unity/models",
+  "cluster_train_pickle_path": "/scratch/vihps/vihps01/unity/unity_train_data.pkl",
+  "cluster_val_pickle_path": "/scratch/vihps/vihps01/unity/unity_val_data.pkl",
+  "cluster_test_pickle_path": "/scratch/vihps/vihps01/unity/unity_test_data.pkl"
 }
