@@ -12,7 +12,7 @@ Pipeline:
 #todo: finish
 """
 
-import scripts.utils as utils
+import archive.utils as utils
 import cv2
 import numpy as np
 from scipy.signal import find_peaks
