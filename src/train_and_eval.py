@@ -10,7 +10,7 @@ import json
 from utils.preprocess import id_to_piece as DEFAULT_ID_TO_PIECE
 from models import CustomChessCNN_v3
 from utils.dataset import (
-    get_config_path,
+    get_path_from_config_file,
     get_train_loader,
     get_val_loader,
 )
@@ -699,7 +699,7 @@ if __name__ == "__main__":
     with open("config.json", "r") as f:
         config = json.load(f)
 
-    save_dir = get_config_path(config, "model_save_dir")
+    save_dir = get_path_from_config_file(config, "model_save_dir")
 
     # Initialize Data and Model
     train_loader = get_train_loader(config, batch_size=16)

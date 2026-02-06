@@ -14,7 +14,7 @@ from utils.preprocess import (
 )
 
 
-def get_config_path(config, key):
+def get_path_from_config_file(config, key):
     """
     Checks for SLURM environment variables to determine if running on cluster.
     If on cluster, looks for 'cluster_' prefix in config.
@@ -104,7 +104,7 @@ def custom_collateTEST(batch):
 
 def get_train_loader(config, batch_size=16):
     ### Train Loader
-    pkl_path = get_config_path(config, "train_pickle_path")
+    pkl_path = get_path_from_config_file(config, "train_pickle_path")
 
     with open(pkl_path, "rb") as f:
         X_loaded, y_loaded = pickle.load(f)
@@ -132,7 +132,7 @@ def get_train_loader(config, batch_size=16):
 
 def get_val_loader(config, batch_size=16):
     ### Val Loader
-    pkl_path = get_config_path(config, "val_pickle_path")
+    pkl_path = get_path_from_config_file(config, "val_pickle_path")
 
     with open(pkl_path, "rb") as f:
         X_loaded, y_loaded = pickle.load(f)
@@ -156,7 +156,7 @@ def get_val_loader(config, batch_size=16):
 
 def get_test_loader(config, batch_size=16):
     ### Test Loader
-    pkl_path = get_config_path(config, "test_pickle_path")
+    pkl_path = get_path_from_config_file(config, "test_pickle_path")
 
     with open(pkl_path, "rb") as f:
         X_loaded, y_loaded = pickle.load(f)

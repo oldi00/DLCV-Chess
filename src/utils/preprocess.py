@@ -12,8 +12,14 @@ from collections import defaultdict
 
 
 # Detect if cluster or not.
-def get_config_path(config, key):
-    """Detects if running on cluster and resolves the correct path."""
+def get_path_from_config_file(config, key):
+    """
+    Detects if running on cluster and resolves the correct path.
+
+    Args:
+        config: the json input from the config file.
+        key: the normal path without 'cluster_' in it.
+    """
     on_cluster = "SLURM_JOB_ID" in os.environ
     if on_cluster:
         return config.get(f"cluster_{key}", config.get(key))
@@ -553,13 +559,13 @@ def fast_rebuild_pickles(config):
     Automatically switches between Local and Cluster storage.
     """
     # Resolve Paths from Config
-    base_dir = get_config_path(config, "preprocessed_output_dir").split(
+    base_dir = get_path_from_config_file(config, "preprocessed_images_dir").split(
         "ChessReD_Hough"
     )[
         0
     ]  # Root DLCV dir
-    save_dir = get_config_path(config, "preprocessed_output_dir")
-    annotations_path = get_config_path(config, "annotation_file")
+    save_dir = get_path_from_config_file(config, "preprocessed_images_dir")
+    annotations_path = get_path_from_config_file(config, "annotation_file")
 
     print(f"📖 Loading annotations from: {annotations_path}")
     with open(annotations_path, "r") as f:
@@ -710,7 +716,7 @@ def preprocess_and_save_splits_no_preprocess(
             valid_warp_ids.append(i)
 
 
-def create_pickle(base_dir, json_file_name, split_ratios=[0.7, 0.2, 0.1]):
+def create_pickle(config, base_dir, json_file_name, split_ratios=[0.7, 0.2, 0.1]):
     base_path = Path(base_dir)
     json_path = base_path / json_file_name
 
@@ -751,4 +757,5 @@ def create_pickle(base_dir, json_file_name, split_ratios=[0.7, 0.2, 0.1]):
 if __name__ == "__main__":
     base_dir = "G:\\Meine Ablage\\DLCV\\Synthetic Data (Unity)"
     json_file_name = "metadata.json"
+
     create_pickle(base_dir, json_file_name)
