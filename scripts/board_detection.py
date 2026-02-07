@@ -1,7 +1,7 @@
 """Detect the chess board in a given image."""
 
 import scripts.utils as utils
-from pathlib import Path
+import sys
 import cv2
 import numpy as np
 from rembg import remove, new_session
@@ -9,7 +9,7 @@ from rembg import remove, new_session
 SESSION = new_session("isnet-general-use")
 
 
-def detect_board(img_path, debug=False):
+def detect_board(img, debug=False):
     """
     Detect and extract a top-down view of a chess board from the image.
 
@@ -20,7 +20,7 @@ def detect_board(img_path, debug=False):
     4. Apply perspective correction to crop the board.
 
     Args:
-        img_path (Path): Path to the source image.
+        img (np.ndarray): The source image as a NumPy array (RGB).
         debug (bool): If True, populates the debug dict and prints rejection reasons.
 
     Returns:
@@ -30,9 +30,6 @@ def detect_board(img_path, debug=False):
     """
 
     debug_info = {}
-    link = Path(img_path).resolve().as_uri()
-
-    img = utils.load_image_RGB(img_path)
 
     # Resize to 320px for speed; we scale coordinates back up later.
     img_resized, scale = utils.resize_image(img, target_width=320)
@@ -61,16 +58,14 @@ def detect_board(img_path, debug=False):
     contours, _ = cv2.findContours(img_morph, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
     if not contours:
-        if debug:
-            print(f"Skipping {link}: No contours detected.")
+        debug_info["error"] = "No contours detected."
         return None, debug_info
 
     # Assumption: The board is the most prominent object after background removal.
     cnt = max(contours, key=cv2.contourArea)
 
     if cv2.contourArea(cnt) < (img_resized.shape[0] * img_resized.shape[1] * 0.1):
-        if debug:
-            print(f"Skipping {link}: Largest contour is too small.")
+        debug_info["error"] = "Largest contour is too small."
         return None, debug_info
 
     hull = cv2.convexHull(cnt)
@@ -81,8 +76,7 @@ def detect_board(img_path, debug=False):
     # Solidity Check: Ensure the shape isn't a "star" or "C-shape".
     # A board should be solid (Area roughly equals Hull Area).
     if cv2.contourArea(cnt) / cv2.contourArea(hull) < 0.7:
-        if debug:
-            print(f"Skipping {link}: Solidity is too far off.")
+        debug_info["error"] = "Solidity is too far off."
         return None, debug_info
 
     # 0.02 (2%) is a standard epsilon for geometrical shapes like rectangles.
@@ -94,13 +88,11 @@ def detect_board(img_path, debug=False):
         debug_info["approx"] = approx
 
     if len(approx) != 4:
-        if debug:
-            print(f"Skipping {link}: Found {len(approx)} corners instead of four.")
+        debug_info["error"] = f"Found {len(approx)} corners instead of four."
         return None, debug_info
 
     if not cv2.isContourConvex(approx):
-        if debug:
-            print(f"Skipping {link}: Approximation is not convex.")
+        debug_info["error"] = "Approximation is not convex."
         return None, debug_info
 
     # todo: angle sanity check
@@ -116,3 +108,50 @@ def detect_board(img_path, debug=False):
     top_down_view = utils.warp_board(img.copy(), corners / scale)
 
     return top_down_view, debug_info
+
+
+def main():
+    """
+    Read raw image bytes from stdin, attempt to detect a chess board, and write
+    the resulting PNG bytes or failure message to stdout.
+    """
+
+    # Read raw image bytes from standard input (stdin).
+    try:
+
+        input_bytes = sys.stdin.buffer.read()
+        if not input_bytes:
+            raise ValueError("Empty input.")
+
+        # Decode bytes into an OpenCV image.
+        array = np.frombuffer(input_bytes, np.uint8)
+        img_bgr = cv2.imdecode(array, cv2.IMREAD_COLOR)
+
+        if img_bgr is None:
+            raise ValueError("Failed to decode image bytes.")
+
+        img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
+
+    except Exception:
+        sys.stdout.write("NO_BOARD_DETECTED")
+        return
+
+    board, _ = detect_board(img_rgb, debug=False)
+
+    if board is None:
+        sys.stdout.write("NO_BOARD_DETECTED")
+    else:
+
+        # Encode the result back to an image format.
+        board_bgr = cv2.cvtColor(board, cv2.COLOR_RGB2BGR)
+        success, encoded_img = cv2.imencode('.png', board_bgr)
+
+        if success:
+            # Write raw image bytes to the stdout buffer.
+            sys.stdout.buffer.write(encoded_img.tobytes())
+        else:
+            sys.stdout.write("NO_BOARD_DETECTED")
+
+
+if __name__ == "__main__":
+    main()
