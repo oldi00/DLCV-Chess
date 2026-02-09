@@ -1,6 +1,9 @@
+"""..."""
+
 from board_detection import detect_board
 import utils
 import utils_chess_cv
+import gc
 import cv2
 import json
 import uuid
@@ -9,65 +12,52 @@ from collections import defaultdict
 from tqdm import tqdm
 
 
-# --- CONFIGURATION---
+# --- CONFIGURATION ---
 
-SOURCE_CUSTOM = Path(r"G:\.shortcut-targets-by-id\1kK41aQ1XMbjKKuinmDPfwUPClMvdcMvu\DLCV\Games")
-SOURCE_CHESSRED = Path(
-    r"G:\.shortcut-targets-by-id\1kK41aQ1XMbjKKuinmDPfwUPClMvdcMvu\DLCV\ChessReD")
+BASE_DIR = Path(r"G:\.shortcut-targets-by-id\1kK41aQ1XMbjKKuinmDPfwUPClMvdcMvu\DLCV")
 
-ANNOTATIONS_PATH = Path(
-    r"G:\.shortcut-targets-by-id\1kK41aQ1XMbjKKuinmDPfwUPClMvdcMvu\DLCV\annotations.json")
+GAMES_DIR = BASE_DIR / "Games"
+CHESSRED_DIR = BASE_DIR / "ChessReD"
+OUTPUT_DIR = BASE_DIR / "Fine-Tuning"
 
-DEST_DIR = Path(r"G:\.shortcut-targets-by-id\1kK41aQ1XMbjKKuinmDPfwUPClMvdcMvu\DLCV\Fine-Tuning")
-DEST_HIGH = DEST_DIR / "HIGH"
-DEST_LOW = DEST_DIR / "LOW"
-
-METADATA_FILE = DEST_DIR / "metadata.json"
-
-DEBUG_LIMIT = 10  # Set to None for a full run.
+ANNOTATIONS_FILE = BASE_DIR / "annotations.json"
+METADATA_FILE = OUTPUT_DIR / "metadata.json"
+FAILS_FILE = OUTPUT_DIR / "fails.json"
 
 
-def process_image(img_path, fen, metadata, source_name):
+def load_json(path):
 
-    img_rgb = utils.load_image_RGB(img_path)
-    board, debug = detect_board(img_rgb, debug=True)
+    metadata = {}
+    if path.exists():
+        with open(path, 'r') as f:
+            metadata = json.load(f)
 
-    if board is None:
-        return "FAIL"
-
-    image_guid = str(uuid.uuid4())
-    save_name = f"{image_guid}.png"
-
-    save_folder = DEST_HIGH if debug["confidence"] == "HIGH" else DEST_LOW
-    save_path = save_folder / save_name
-
-    cropped_bgr = cv2.cvtColor(board, cv2.COLOR_RGB2BGR)
-    cv2.imwrite(str(save_path), cropped_bgr)
-
-    metadata[image_guid] = {
-        "fen": fen,
-        "source": source_name,
-    }
-
-    return debug["confidence"]
+    return metadata
 
 
-def get_custom_data(source_path):
+def save_json(data, path):
 
-    valid_exts = {'.jpg', '.jpeg', '.png'}
-    files = [p for p in source_path.rglob('*') if p.suffix.lower() in valid_exts]
+    with open(path, 'w', encoding='utf-8') as f:
+        json.dump(data, f, indent=4, ensure_ascii=False)
+
+
+def get_custom_data():
+
+    valid_formats = {'.jpg', '.jpeg', '.png'}
+    files = [p for p in GAMES_DIR.rglob('*') if p.suffix.lower() in valid_formats]
 
     data = []
     for file in files:
+
         fen = "/".join(file.stem.split('_')[:-1])
         data.append((file, fen))
 
     return data
 
 
-def get_chessred_data(source_root, json_path):
+def get_chessred_data():
 
-    with open(json_path, 'r') as f:
+    with open(ANNOTATIONS_FILE, 'r') as f:
         annotations = json.load(f)
 
     image_to_pieces = defaultdict(list)
@@ -77,7 +67,7 @@ def get_chessred_data(source_root, json_path):
     data = []
     for img_info in annotations['images']:
 
-        full_path = source_root / img_info['path']
+        full_path = CHESSRED_DIR / img_info['path']
 
         pieces = image_to_pieces[img_info['id']]
         raw_fen = utils_chess_cv.pieces_to_fen(pieces)
@@ -87,45 +77,66 @@ def get_chessred_data(source_root, json_path):
     return data
 
 
+def process_image(img_path, fen, metadata, fails, source_name):
+
+    img_rgb = utils.load_image_RGB(img_path)
+    board, debug = detect_board(img_rgb, debug=True)
+
+    if board is None:
+        fails[str(img_path)] = {"reason": debug["error"]}
+        return
+
+    image_guid = str(uuid.uuid4())
+
+    save_name = f"{image_guid}.png"
+    save_path = OUTPUT_DIR / save_name
+
+    cropped_bgr = cv2.cvtColor(board, cv2.COLOR_RGB2BGR)
+    cv2.imwrite(str(save_path), cropped_bgr)
+
+    metadata[image_guid] = {
+        "fen": fen,
+        "source": source_name,
+        "original_path": str(img_path),
+        "confidence": debug["confidence"]
+    }
+
+
 def main():
 
-    DEST_HIGH.mkdir(parents=True, exist_ok=True)
-    DEST_LOW.mkdir(parents=True, exist_ok=True)
+    metadata = load_json(METADATA_FILE)
+    fails = load_json(FAILS_FILE)
 
-    metadata = {}
-    if METADATA_FILE.exists():
-        with open(METADATA_FILE, 'r') as f:
-            metadata = json.load(f)
-
-    custom_list = get_custom_data(SOURCE_CUSTOM)
-    chessred_list = get_chessred_data(SOURCE_CHESSRED, ANNOTATIONS_PATH)
+    processed_paths = set()
+    for entry in metadata.values():
+        processed_paths.add(entry["original_path"])
+    for path in fails.keys():
+        processed_paths.add(path)
 
     tasks = [
-        (custom_list, "Custom"),
-        (chessred_list, "ChessReD")
+        ("Custom", get_custom_data()),
+        ("ChessReD", get_chessred_data()),
     ]
 
-    stats = {"HIGH": 0, "LOW": 0, "FAIL": 0}
+    session_count = 0
 
-    for dataset, name in tasks:
+    for src_name, dataset in tasks:
 
-        for i, (img_path, fen) in enumerate(tqdm(dataset, desc=f"Processing {name}", unit="img")):
+        for i, (img_path, fen) in enumerate(tqdm(dataset, desc=src_name, unit="img")):
 
-            if DEBUG_LIMIT and i >= DEBUG_LIMIT:
-                break
+            if str(img_path) in processed_paths:
+                continue
 
-            res = process_image(img_path, fen, metadata, name)
-            stats[res] += 1
+            process_image(img_path, fen, metadata, fails, src_name)
 
-    with open(METADATA_FILE, 'w') as f:
-        json.dump(metadata, f, indent=4)
+            session_count += 1
+            if session_count % 100 == 0:
+                save_json(metadata, METADATA_FILE)
+                save_json(fails, FAILS_FILE)
+                gc.collect()
 
-    print("PROCESSING COMPLETE!")
-    print("\n" + "="*30)
-    print(f"High Quality: {stats['HIGH']}")
-    print(f"Low Quality:  {stats['LOW']}")
-    print(f"Failures:     {stats['FAIL']}")
-    print("="*30)
+    save_json(metadata, METADATA_FILE)
+    save_json(fails, FAILS_FILE)
 
 
 if __name__ == "__main__":
