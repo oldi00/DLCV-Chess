@@ -1,6 +1,7 @@
 """Detect the chess board in a given image."""
 
 import scripts.utils as utils
+import scripts.utils_chess_cv as utils_chess_cv
 import sys
 import cv2
 import numpy as np
@@ -79,33 +80,47 @@ def detect_board(img, debug=False):
         debug_info["error"] = "Solidity is too far off."
         return None, debug_info
 
-    # 0.02 (2%) is a standard epsilon for geometrical shapes like rectangles.
-    # It allows for slight curvature (lens distortion) while keeping corners sharp.
-    epsilon = 0.02 * cv2.arcLength(hull, True)
-    approx = cv2.approxPolyDP(hull, epsilon, True)
+    potential_epsilons = np.linspace(0.02, 0.04, num=100)
+
+    approx = None
+    found_quad = False
+
+    perimeter = cv2.arcLength(hull, True)
+
+    for eps in potential_epsilons:
+
+        epsilon = eps * perimeter
+        approx = cv2.approxPolyDP(hull, epsilon, True)
+
+        if len(approx) == 4 and cv2.isContourConvex(approx):
+            found_quad = True
+            break
+
+    if not found_quad:
+        debug_info["error"] = f"Could not simplify to 4 corners (Last attempt: {len(approx)})"
+        return None, debug_info
 
     if debug:
         debug_info["approx"] = approx
 
-    if len(approx) != 4:
-        debug_info["error"] = f"Found {len(approx)} corners instead of four."
-        return None, debug_info
+    min_eps, max_eps = potential_epsilons[0], potential_epsilons[-1]
 
-    if not cv2.isContourConvex(approx):
-        debug_info["error"] = "Approximation is not convex."
-        return None, debug_info
+    raw_score = 1.0 - ((eps - min_eps) / (max_eps - min_eps))
+    confidence_score = max(0.0, min(1.0, raw_score))
+
+    debug_info["confidence"] = "HIGH" if confidence_score > 0.9 else "LOW"
 
     # todo: angle sanity check
     # todo: check for boards that are not fully visible
 
     corners = np.float32([pt[0] for pt in approx])
-    corners = utils.order_points_robust(corners)
+    corners = utils_chess_cv.order_points_robust(corners)
 
     if debug:
         debug_info["corners"] = corners
 
     # Warp the original high-res image using scaled-up coordinates
-    top_down_view = utils.warp_board(img.copy(), corners / scale)
+    top_down_view = utils_chess_cv.warp_board(img.copy(), corners / scale)
 
     return top_down_view, debug_info
 
