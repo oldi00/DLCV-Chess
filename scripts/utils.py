@@ -1,5 +1,4 @@
 import cv2
-import numpy as np
 
 
 def load_image_RGB(img_path):
@@ -27,47 +26,3 @@ def resize_image(img, target_width=640):
     resized = cv2.resize(img, (new_width, new_height), interpolation=interpolation)
 
     return resized, scale
-
-
-def order_points_robust(pts):
-    """
-    Attribution:
-    -----------
-    Source: Adapted from 'chess-cv'
-    URL: https://github.com/Luthiraa/CVChess/blob/main/src/final_notebook.ipynb
-    Authors: Luthira Abeykoon, Darshan Kasundra, Gawtham Senthilvelan, Ved Patel
-    """
-
-    # First, get bounding box
-    x_sorted = pts[np.argsort(pts[:, 0]), :]
-    left_most = x_sorted[:2, :]
-    right_most = x_sorted[2:, :]
-
-    # sort by y-coord
-    tl, bl = left_most[np.argsort(left_most[:, 1]), :]
-    tr, br = right_most[np.argsort(right_most[:, 1]), :]
-
-    return np.array([tl, tr, br, bl], dtype="float32")  # Clockwise
-
-
-def warp_board(img, corners, output_size=400):
-    """
-    Attribution:
-    -----------
-    Source: Adapted from 'chess-cv'
-    URL: https://github.com/Luthiraa/CVChess/blob/main/src/final_notebook.ipynb
-    Authors: Luthira Abeykoon, Darshan Kasundra, Gawtham Senthilvelan, Ved Patel
-    """
-
-    src_pts = order_points_robust(corners)
-    dst_pts = np.array([
-        [0, 0],
-        [output_size-1, 0],
-        [output_size-1, output_size-1],
-        [0, output_size-1]
-    ], dtype="float32")
-
-    M = cv2.getPerspectiveTransform(src_pts, dst_pts)
-    warped = cv2.warpPerspective(img, M, (output_size, output_size))
-
-    return warped
