@@ -70,11 +70,19 @@ def pieces_to_fen(piece_list):
     fen_rows = []
     for row in board:
         fen_row = ''
+        empty_count = 0
         for cell in row:
             if cell == '1':
-                fen_row += '0'
+                empty_count += 1
             else:
+                if empty_count > 0:
+                    fen_row += str(empty_count)
+                    empty_count = 0
                 fen_row += cell
+
+        if empty_count > 0:
+            fen_row += str(empty_count)
+
         fen_rows.append(fen_row)
 
     return '/'.join(fen_rows)
