@@ -1,6 +1,7 @@
 """Transforms the Unity snapshots into a 400x400x3 top-down view for model training."""
 
 import utils
+import utils_chess_cv
 import json
 import shutil
 from pathlib import Path
@@ -22,15 +23,20 @@ def main():
 
     for img_path, img_data in tqdm(metadata.items(), desc="Transforming Images", unit="img"):
 
+        save_path = DIR_CLOUD / Path(img_path).name
+
+        if save_path.exists():
+            continue
+
         img = utils.load_image_RGB(DIR_SNAPSHOTS / img_path)
 
         corners = np.array(img_data["corners"], dtype="float32")
-        corners = utils.order_points(corners)
+        corners = utils_chess_cv.order_points_robust(corners)
 
-        img = utils.get_top_down_view(img, corners, (400, 400))
+        img = utils_chess_cv.warp_board(img, corners)
         img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
 
-        cv2.imwrite(str(DIR_CLOUD / Path(img_path).name), img)
+        cv2.imwrite(str(save_path), img)
 
 
 if __name__ == "__main__":
