@@ -3,8 +3,8 @@ import torch.onnx
 from models import CustomChessCNN_v3
 import os
 
-MODEL_PATH = "epoch15.pth"
-OUTPUT_ONNX = "chess_model.onnx"
+MODEL_PATH = "G:/Meine Ablage/DLCV/models/finetuned/epoch15.pth"
+OUTPUT_ONNX = "onnx_models/finetuned_chess_model.onnx"
 
 
 def export_model():

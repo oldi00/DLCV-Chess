@@ -716,20 +716,21 @@ def preprocess_and_save_splits_no_preprocess(
             valid_warp_ids.append(i)
 
 
-def create_pickle(config, base_dir, json_file_name, split_ratios=[0.7, 0.2, 0.1]):
+def create_pickle(base_dir, image_dir, json_file_name, split_ratios=[0.7, 0.2, 0.1]):
     base_path = Path(base_dir)
+    image_dir = Path(image_dir)
     json_path = base_path / json_file_name
 
     with open(json_path, "r") as f:
         label_data = json.load(f)
 
     data_pairs = []
-    files = sorted([f for f in os.listdir(base_path) if f.endswith((".jpg", ".png"))])
+    files = sorted([f for f in os.listdir(image_dir) if f.endswith((".jpg", ".png"))])
     print(f"{len(files)} images in the folder.")
 
     for file_name in files:
         if file_name in label_data:
-            file_path = str(base_path / file_name)
+            file_path = str(image_dir / file_name)
             fen = label_data[file_name]["fen"]
             data_pairs.append((file_path, fen))
 
@@ -755,7 +756,8 @@ def create_pickle(config, base_dir, json_file_name, split_ratios=[0.7, 0.2, 0.1]
 
 
 if __name__ == "__main__":
-    base_dir = "G:\\Meine Ablage\\DLCV\\Synthetic Data (Unity)"
+    base_dir = "/scratch/vihps/vihps01/unity"
+    image_dir = "/scratch/vihps/vihps01/Synthetic Data (Unity)"
     json_file_name = "metadata.json"
 
-    create_pickle(base_dir, json_file_name)
+    create_pickle(base_dir, image_dir, json_file_name)
