@@ -30,33 +30,58 @@ def plot_images(plot_title, images, cols=3, normalize_img_size=True):
     n = len(images)
     rows = int(np.ceil(n / cols))
 
-    fig, axes = plt.subplots(rows, cols, figsize=(cols * 4, rows * 4), constrained_layout=True)
+    row_height = 4
+    fig_width = cols * 4
+    fig_height = rows * row_height
+
+    fig, axes = plt.subplots(
+        rows,
+        cols,
+        figsize=(fig_width, fig_height),
+        constrained_layout=True,
+        facecolor='white'
+    )
+
+    physical_offset = 0.3  # Inches
+    y_pos = 1 + (physical_offset / fig_height)
 
     fig.suptitle(
         plot_title,
         fontsize=24,
         fontweight='bold',
         fontfamily='sans-serif',
-        y=1.07,
+        color='#2c3e50',
+        y=y_pos,
+        va='bottom'
     )
 
-    for i, (title, img) in enumerate(images):
-        ax = axes.flat[i]
+    if n == 1:
+        axes = np.array([axes])
+    axes_flat = axes.flatten()
+
+    for ax, (title, img) in zip(axes_flat, images):
+
         img = img.astype(np.uint8)
         if normalize_img_size:
             img = resize_and_crop(img)
-        ax.imshow(img, cmap="gray")
+
+        ax.imshow(img, cmap="gray", interpolation='bicubic')
+        ax.axis("off")
+
         if title is not None:
             ax.set_title(
-                f"{i+1}. {title}",
-                fontsize=12,
+                title,
+                fontsize=14,
                 fontfamily='sans-serif',
-                color='#444',
-                pad=10,
+                fontweight='medium',
+                color='#555555',
+                pad=12,
             )
 
-    for ax in axes.flat:
+    # Hide empty slots.
+    for ax in axes_flat[n:]:
         ax.axis("off")
+        ax.set_visible(False)
 
     plt.show()
 

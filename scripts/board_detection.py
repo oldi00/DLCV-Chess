@@ -1,4 +1,10 @@
-"""Detect the chess board in a given image."""
+"""
+Detect the chess board in a given image.
+
+An .exe of this script can be installed with the following command:
+>>> pyinstaller --onedir --copy-metadata=pymatting --copy-metadata=tqdm --copy-metadata=rembg
+--hidden-import=onnxruntime --hidden-import=scipy board_detection.py
+"""
 
 import scripts.utils as utils
 import scripts.utils_chess_cv as utils_chess_cv
@@ -8,6 +14,20 @@ import numpy as np
 from rembg import remove, new_session
 
 SESSION = new_session("isnet-general-use")
+
+
+def get_confidence_score(cnt_area, hull_area, approx):
+    """Computes a confidence score (0.0 - 1.0) based on solidity and quad fit."""
+
+    if hull_area <= 0:
+        return 0.0
+
+    approx_area = cv2.contourArea(approx)
+
+    solidity = cnt_area / hull_area
+    quad_fit = approx_area / hull_area
+
+    return round(solidity * quad_fit, 3)
 
 
 def detect_board(img, debug=False):
@@ -22,7 +42,7 @@ def detect_board(img, debug=False):
 
     Args:
         img (np.ndarray): The source image as a NumPy array (RGB).
-        debug (bool): If True, populates the debug dict and prints rejection reasons.
+        debug (bool): If True, populates the debug dict.
 
     Returns:
         tuple: (board_view, debug_info)
@@ -64,19 +84,21 @@ def detect_board(img, debug=False):
 
     # Assumption: The board is the most prominent object after background removal.
     cnt = max(contours, key=cv2.contourArea)
+    cnt_area = cv2.contourArea(cnt)
 
-    if cv2.contourArea(cnt) < (img_resized.shape[0] * img_resized.shape[1] * 0.1):
+    if cnt_area < (img_resized.shape[0] * img_resized.shape[1] * 0.1):
         debug_info["error"] = "Largest contour is too small."
         return None, debug_info
 
     hull = cv2.convexHull(cnt)
+    hull_area = cv2.contourArea(hull)
 
     if debug:
         debug_info["hull"] = hull
 
     # Solidity Check: Ensure the shape isn't a "star" or "C-shape".
     # A board should be solid (Area roughly equals Hull Area).
-    if cv2.contourArea(cnt) / cv2.contourArea(hull) < 0.7:
+    if cnt_area / hull_area < 0.7:
         debug_info["error"] = "Solidity is too far off."
         return None, debug_info
 
@@ -103,15 +125,8 @@ def detect_board(img, debug=False):
     if debug:
         debug_info["approx"] = approx
 
-    min_eps, max_eps = potential_epsilons[0], potential_epsilons[-1]
-
-    raw_score = 1.0 - ((eps - min_eps) / (max_eps - min_eps))
-    confidence_score = max(0.0, min(1.0, raw_score))
-
-    debug_info["confidence"] = "HIGH" if confidence_score > 0.9 else "LOW"
-
-    # todo: angle sanity check
-    # todo: check for boards that are not fully visible
+    confidence_score = get_confidence_score(cnt_area, hull_area, approx)
+    debug_info["confidence"] = confidence_score
 
     corners = np.float32([pt[0] for pt in approx])
     corners = utils_chess_cv.order_points_robust(corners)
