@@ -15,6 +15,10 @@ from utils.preprocess import (
     fen_to_label_vector,
 )
 
+TRAIN_PICKLE_PATH = "train_pickle_path"
+VAL_PICKLE_PATH = "val_pickle_path"
+TEST_PICKLE_PATH = "test_pickle_path"
+
 
 def get_path_from_config_file(config, key):
     """
@@ -34,7 +38,7 @@ def get_optimal_workers():
         return int(os.environ["SLURM_CPUS_PER_TASK"])
     try:
         return min(8, multiprocessing.cpu_count())
-    except:
+    except Exception:
         return 4
 
 
@@ -46,8 +50,6 @@ class ChessboardRotDataset(Dataset):
         self.transform = transform or transforms.ToTensor()
 
         # --- Efficiency: Pre-compute Rotations ---
-        # Compute once at the start
-        print("Pre-computing FEN rotations...")
         self.cached_rotations = []
         for i, fen in enumerate(fen_labels):
             try:
@@ -59,9 +61,7 @@ class ChessboardRotDataset(Dataset):
                 ]
                 self.cached_rotations.append(rotations)
             except AssertionError as e:
-                print(f"Bad FEN at index {i}:\n{fen}")
                 raise e
-        print("Done pre-computing.")
 
     def __len__(self):
         return len(self.image_paths)
@@ -81,8 +81,7 @@ class ChessboardRotDatasetTEST(Dataset):
         self.image_paths = image_paths
         self.transform = transform or transforms.ToTensor()
 
-        # --- Efficiency Update ---
-        print("Pre-computing FEN rotations (TEST)...")
+        # --- Efficiency precompute the rotations ---
         self.cached_rotations = []
         for i, fen in enumerate(fen_labels):
             try:
@@ -94,7 +93,6 @@ class ChessboardRotDatasetTEST(Dataset):
                 ]
                 self.cached_rotations.append(rotations)
             except AssertionError:
-                # Fallback or skip
                 pass
         print("Done.")
 
@@ -126,7 +124,7 @@ def custom_collateTEST(batch):
 
 def get_train_loader(config, batch_size=16, use_ddp=False):
     ### Train Loader
-    pkl_path = get_path_from_config_file(config, "train_pickle_path")
+    pkl_path = get_path_from_config_file(config, TRAIN_PICKLE_PATH)
 
     with open(pkl_path, "rb") as f:
         X_loaded, y_loaded = pickle.load(f)
@@ -143,36 +141,33 @@ def get_train_loader(config, batch_size=16, use_ddp=False):
 
     train_dataset = ChessboardRotDataset(X_loaded, y_loaded, transform=data_transform)
 
-    # --- DDP Update ---
+    # --- DDP ---
     sampler = None
     if use_ddp:
         sampler = DistributedSampler(train_dataset, shuffle=True)
 
-    # --- EFFIZIENZ UPDATE: Worker & Pin Memory ---
+    # --- Efficiency ---
     num_workers = get_optimal_workers()
     print(f"Using {num_workers} workers for Train Loader")
 
     train_loader = DataLoader(
         train_dataset,
         batch_size=batch_size,
-        shuffle=(
-            sampler is None
-        ),  # WICHTIG: Shuffle muss False sein, wenn Sampler genutzt wird
-        sampler=sampler,  # Sampler übergeben
+        shuffle=(sampler is None),  # Important: Shuffle False when using sampler
+        sampler=sampler,
         collate_fn=custom_collate,
-        num_workers=num_workers,  # Lädt Bilder parallel im Hintergrund
-        pin_memory=True,  # Beschleunigt Transfer zur GPU
-        persistent_workers=True if num_workers > 0 else False,  # Hält Worker am Leben
+        num_workers=num_workers,
+        pin_memory=True,
+        persistent_workers=True if num_workers > 0 else False,
     )
 
     print(f"Total images train loader {len(train_dataset)}")
-
     return train_loader
 
 
 def get_val_loader(config, batch_size=16, use_ddp=False):
     ### Val Loader
-    pkl_path = get_path_from_config_file(config, "val_pickle_path")
+    pkl_path = get_path_from_config_file(config, VAL_PICKLE_PATH)
 
     with open(pkl_path, "rb") as f:
         X_loaded, y_loaded = pickle.load(f)
@@ -211,7 +206,7 @@ def get_val_loader(config, batch_size=16, use_ddp=False):
 
 def get_test_loader(config, batch_size=16):
     ### Test Loader
-    pkl_path = get_path_from_config_file(config, "test_pickle_path")
+    pkl_path = get_path_from_config_file(config, TEST_PICKLE_PATH)
 
     with open(pkl_path, "rb") as f:
         X_loaded, y_loaded = pickle.load(f)

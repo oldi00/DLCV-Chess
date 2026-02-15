@@ -1,9 +1,8 @@
 import os
 import torch
 import json
-import torch.nn as nn
-from models import CustomChessCNN_v3
-from train_and_eval import (
+from utils.models import CustomChessCNN_v3
+from train_model import (
     train,
     get_train_loader,
     get_val_loader,
@@ -55,7 +54,7 @@ def freeze_geometric_layers(model):
             trainable_params += param.numel()
 
     print(
-        f"   -> Trainable Parameters: {trainable_params:,} / {all_params:,} ({(trainable_params/all_params):.1%})"
+        f"-> Trainable Parameters: {trainable_params:,} / {all_params:,} ({(trainable_params / all_params):.1%})"
     )
     print("-" * 30)
 
@@ -137,7 +136,7 @@ def main():
         base_save_dir = get_path_from_config_file(config, "model_save_dir")
         ft_save_dir = os.path.join(base_save_dir, "finetuned_real")
 
-    print(f"\n🏃 Starting Fine-tuning (Sim2Real)...")
+    print("\n🏃 Starting Fine-tuning (Sim2Real)...")
     print(f"   Target Save Directory: {ft_save_dir}")
 
     # --- 8. Start Training ---
