@@ -86,3 +86,29 @@ def pieces_to_fen(piece_list):
         fen_rows.append(fen_row)
 
     return '/'.join(fen_rows)
+
+
+def detect_board_corners(img):
+
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    blur = cv2.GaussianBlur(gray, (5, 5), 0)
+    edges = cv2.Canny(blur, 50, 150)
+
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
+    dilated = cv2.dilate(edges, kernel, iterations=2)
+
+    contours, _ = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours = sorted(contours, key=cv2.contourArea, reverse=True)
+
+    image_area = img.shape[0] * img.shape[1]
+
+    for cnt in contours:
+        epsilon = 0.02 * cv2.arcLength(cnt, True)
+        approx = cv2.approxPolyDP(cnt, epsilon, True)
+
+        if len(approx) == 4 and cv2.contourArea(approx) > 0.1 * image_area:
+            corners = np.float32([pt[0] for pt in approx])
+            ordered = order_points_robust(corners)
+            return ordered, dilated
+
+    return None, dilated

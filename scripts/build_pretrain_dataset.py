@@ -12,8 +12,7 @@ import cv2
 import numpy as np
 from tqdm import tqdm
 
-CLOUD_DIR = Path(r"G:\.shortcut-targets-by-id\1kK41aQ1XMbjKKuinmDPfwUPClMvdcMvu\DLCV")
-OUT_DIR = CLOUD_DIR / "Pre-Training Dataset"
+OUT_DIR = Path(r"C:\Users\miles\Documents\Pre-Training Dataset")
 METADATA_DIR = OUT_DIR / "metadata.json"
 
 
@@ -81,8 +80,8 @@ def process_and_save_entry(
     cv2.imwrite(str(out_path), img)
     metadata[out_name] = {"fen": fen}
 
-    if len(metadata) % 1000 == 0:
-        save_metadata(metadata)
+    # if len(metadata) % 1000 == 0:
+    #     save_metadata(metadata)
 
 
 def process_unity(dir: Path, metadata: dict) -> None:
