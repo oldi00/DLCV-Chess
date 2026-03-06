@@ -1,15 +1,16 @@
-"""..."""
+"""Build a fine-tuning dataset of warped boards and FEN metadata."""
 
-from board_detection import detect_board
-from utils_chess_cv import pieces_to_fen
-from pathlib import Path
+import json
+import os
+import shutil
 from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor
-import json
-import shutil
-import os
+from pathlib import Path
+
 import cv2
+from board_detection import detect_board
 from tqdm import tqdm
+from utils_chess_cv import pieces_to_fen
 
 CLOUD_DIR = Path(r"G:\.shortcut-targets-by-id\1kK41aQ1XMbjKKuinmDPfwUPClMvdcMvu\DLCV")
 CHESSRED_DIR = Path(r"C:\Users\miles\Documents\ChessReD_Hough")
@@ -22,7 +23,6 @@ ANNOTATIONS_PATH = CLOUD_DIR / "annotations.json"
 
 def load_metadata(path: Path) -> dict:
     """Load the metadata JSON file at the given path."""
-
     metadata = {}
     if path.exists():
         with open(path, 'r') as f:
@@ -33,14 +33,12 @@ def load_metadata(path: Path) -> dict:
 
 def save_json(data: dict, path: Path) -> None:
     """Save the given dict as a JSON at the provided path."""
-
     with open(path, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=4, ensure_ascii=False)
 
 
 def get_custom_data() -> list:
     """Fetch all paths of custom chess board images with their FEN and a unique name."""
-
     valid_formats = {'.jpg', '.jpeg', '.png'}
     files = [p for p in GAMES_DIR.rglob('*') if p.suffix.lower() in valid_formats]
 
@@ -55,7 +53,6 @@ def get_custom_data() -> list:
 
 def get_chessred_data() -> list:
     """Fetch all ChessRed image paths with their FEN and a unique name."""
-
     annotations = load_metadata(ANNOTATIONS_PATH)
 
     image_to_pieces = defaultdict(list)
@@ -76,9 +73,8 @@ def get_chessred_data() -> list:
     return data
 
 
-def process_image(args):
-    """..."""
-
+def process_image(args: tuple) -> tuple:
+    """Process a single image: detect the board, save the warped crop, and return metadata."""
     img_path, name, fen = args
 
     img = cv2.imread(str(img_path))
@@ -95,9 +91,8 @@ def process_image(args):
     return name, True, fen, score
 
 
-def process_dataset(title: str, dataset: list, metadata: dict):
-    """..."""
-
+def process_dataset(title: str, dataset: list, metadata: dict) -> None:
+    """Process a dataset of images in parallel, saving warped boards and updating metadata with FEN and confidence scores."""
     to_process = []
     for item in dataset:
         img_path, name, _ = item
@@ -119,9 +114,8 @@ def process_dataset(title: str, dataset: list, metadata: dict):
             metadata["fails"].append(name)
 
 
-def sync_chessred():
-    """..."""
-
+def sync_chessred() -> None:
+    """One-time sync of ChessReD dataset: copy images, convert annotations to FEN, and update metadata."""
     metadata = load_metadata(METADATA_PATH)
     annotations = load_metadata(ANNOTATIONS_PATH)
 
@@ -152,8 +146,8 @@ def sync_chessred():
     save_json(metadata, METADATA_PATH)
 
 
-def main():
-
+def main() -> None:
+    """Main entry point: load metadata, process datasets, and save results."""
     metadata = load_metadata(METADATA_PATH)
 
     if "fails" not in metadata.keys():

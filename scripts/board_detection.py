@@ -1,26 +1,26 @@
-"""
-Detect the chess board in a given image.
+"""Detect the chess board in a given image.
 
 An .exe of this script can be installed with the following command:
 >>> pyinstaller --onedir --copy-metadata=pymatting --copy-metadata=tqdm --copy-metadata=rembg
     --hidden-import=onnxruntime --hidden-import=scipy scripts/board_detection.py
 """
 
-import scripts.utils as utils
-import scripts.utils_chess_cv as utils_chess_cv
-import sys
-import json
 import base64
+import json
+import sys
+
 import cv2
 import numpy as np
-from rembg import remove, new_session
+from rembg import new_session, remove
+
+import scripts.utils as utils
+import scripts.utils_chess_cv as utils_chess_cv
 
 SESSION = new_session("isnet-general-use")
 
 
-def get_confidence_score(cnt_area, hull_area, approx):
+def get_confidence_score(cnt_area: float, hull_area: float, approx: np.ndarray) -> float:
     """Computes a confidence score (0.0 - 1.0) based on solidity and quad fit."""
-
     if hull_area <= 0:
         return 0.0
 
@@ -32,9 +32,8 @@ def get_confidence_score(cnt_area, hull_area, approx):
     return round(solidity * quad_fit, 3)
 
 
-def detect_board(img, debug=False):
-    """
-    Detect and extract a top-down view of a chess board from the image.
+def detect_board(img: np.ndarray, debug: bool = False) -> tuple:
+    """Detect and extract a top-down view of a chess board from the image.
 
     Pipeline:
     1. Isolate foreground using AI background removal.
@@ -51,7 +50,6 @@ def detect_board(img, debug=False):
             - board_view (np.ndarray | None): The rectified board image, or None if failed.
             - debug_info (dict): Intermediate data for visualization.
     """
-
     debug_info = {}
 
     # Resize to 320px for speed; we scale coordinates back up later.
@@ -142,12 +140,8 @@ def detect_board(img, debug=False):
     return (top_down_view, confidence_score, corners / scale), debug_info
 
 
-def main():
-    """
-    Read raw image bytes from stdin, attempt to detect a chess board, and write
-    the resulting PNG bytes or failure message to stdout.
-    """
-
+def main() -> None:
+    """Read raw image bytes from stdin, attempt to detect a chess board, and write the resulting PNG bytes or failure message to stdout."""
     # Read raw image bytes from standard input (stdin).
     try:
 

@@ -1,5 +1,4 @@
-"""
-Annotate raw images of chess positions with associated FEN strings.
+"""Annotate raw images of chess positions with associated FEN strings.
 
 Assumptions:
 - Filename of the FEN strings describes the game name.
@@ -13,6 +12,7 @@ directory since they will already be ignored by git.
 
 import shutil
 from pathlib import Path
+
 from tqdm import tqdm
 
 # CONFIGURATION
@@ -22,9 +22,8 @@ DIR_IMAGES_RAW = Path("data/chess_games/raw/")
 DIR_IMAGES_ANNOTATED = Path("data/chess_games/annotated/")
 
 
-def annotate_game(fen_path: Path):
+def annotate_game(fen_path: Path) -> None:
     """Annotate a single game."""
-
     game_name = fen_path.stem
 
     with open(fen_path) as f:
@@ -66,8 +65,8 @@ def annotate_game(fen_path: Path):
             img_count = 0
 
 
-def main():
-
+def main() -> None:
+    """Annotate all games found in the FEN directory."""
     print(f"[info] Found {len(list(DIR_FEN.iterdir()))} games to annotate.")
 
     for fen_path in DIR_FEN.iterdir():

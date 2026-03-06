@@ -1,10 +1,12 @@
+"""Plotting and drawing helpers for debugging chessboard CV pipelines."""
+
 import cv2
 import numpy as np
 from matplotlib import pyplot as plt
 
 
-def resize_and_crop(img, target_size=(512, 512)):
-
+def resize_and_crop(img: np.ndarray, target_size: tuple = (512, 512)) -> np.ndarray:
+    """Resize the image to fit the target size while maintaining aspect ratio, then crop the center."""
     h, w = img.shape[:2]
     target_w, target_h = target_size
 
@@ -25,8 +27,8 @@ def resize_and_crop(img, target_size=(512, 512)):
     return cropped
 
 
-def plot_images(plot_title, images, cols=3, normalize_img_size=True):
-
+def plot_images(plot_title: str, images: list, cols: int = 3, normalize_img_size: bool = True) -> None:
+    """Plot a list of images with optional titles in a grid layout."""
     n = len(images)
     rows = int(np.ceil(n / cols))
 
@@ -86,8 +88,8 @@ def plot_images(plot_title, images, cols=3, normalize_img_size=True):
     plt.show()
 
 
-def draw_lines(img, lines, color=(255, 255, 255), size=2):
-
+def draw_lines(img: np.ndarray, lines: list, color: tuple = (255, 255, 255), size: int = 2) -> np.ndarray:
+    """Draw lines on the image given in polar coordinates (rho, theta)."""
     dist = max(img.shape) * 100
 
     for rho, theta in lines:
@@ -107,8 +109,8 @@ def draw_lines(img, lines, color=(255, 255, 255), size=2):
     return img
 
 
-def draw_many_lines(img, lines_list, colors):
-
+def draw_many_lines(img: np.ndarray, lines_list: list, colors: list) -> np.ndarray:
+    """Draw multiple sets of lines on the image, each set with a different color."""
     img = img.copy()
 
     for lines, color in zip(lines_list, colors):
@@ -117,8 +119,8 @@ def draw_many_lines(img, lines_list, colors):
     return img
 
 
-def draw_board(img, board_corners, color=(0, 255, 127), size=3):
-
+def draw_board(img: np.ndarray, board_corners: list, color: tuple = (0, 255, 127), size: int = 3) -> np.ndarray:
+    """Draw a polygon connecting the given board corners on the image."""
     board_corners = np.array(board_corners)
 
     center = np.mean(board_corners, axis=0)
@@ -137,21 +139,21 @@ def draw_board(img, board_corners, color=(0, 255, 127), size=3):
     return img_board
 
 
-def draw_points(img, points, color=(250, 20, 50)):
-
+def draw_points(img: np.ndarray, points: list, color: tuple = (250, 20, 50)) -> np.ndarray:
+    """Draw points on the image."""
     for x, y in points:
         cv2.circle(img, (int(x), int(y)), 5, color, -1)
 
     return img
 
 
-def draw_contours(img, contours, color=(0, 255, 127)):
-
+def draw_contours(img: np.ndarray, contours: list, color: tuple = (0, 255, 127)) -> np.ndarray:
+    """Draw contours on the image."""
     return cv2.drawContours(img.copy(), contours, -1, color, 2)
 
 
-def plot_histograms(plot_title, *histograms, cols=2):
-
+def plot_histograms(plot_title: str, *histograms: tuple, cols: int = 2) -> None:
+    """Plot multiple histograms in a grid layout, each with its peaks highlighted."""
     n = len(histograms)
     rows = int(np.ceil(n / cols))
 
@@ -181,8 +183,8 @@ def plot_histograms(plot_title, *histograms, cols=2):
     plt.show()
 
 
-def draw_grid_on_board(img, color=(0, 255, 0), thickness=2):
-
+def draw_grid_on_board(img: np.ndarray, color: tuple = (0, 255, 0), thickness: int = 2) -> np.ndarray:
+    """Draw a grid on the board."""
     img_grid = img.copy()
 
     h, w = img_grid.shape[:2]

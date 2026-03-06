@@ -1,15 +1,15 @@
-"""..."""
+"""Evaluate board-corner detection quality against labeled datasets using IoU."""
 
-from board_detection import detect_board
-from utils_chess_cv import order_points_robust, detect_board_corners
-from utils import load_image_RGB
-from pathlib import Path
 import json
+from pathlib import Path
+
 import cv2
 import numpy as np
+from board_detection import detect_board
 from shapely.geometry import Polygon
 from tqdm import tqdm
-
+from utils import load_image_RGB
+from utils_chess_cv import detect_board_corners, order_points_robust
 
 UNITY_DIR = Path(r"C:\Users\miles\code\uni\dlcv\ChessDataGen\Snapshots")
 UNITY_METADATA_PATH = UNITY_DIR / "metadata.json"
@@ -22,9 +22,8 @@ CUSTOM_DIR = Path(r"C:\Users\miles\code\uni\dlcv\Board Detection Evaluation")
 CUSTOM_METADATA_PATH = CUSTOM_DIR / "metadata.json"
 
 
-def load_metadata(path: Path):
-    """..."""
-
+def load_metadata(path: Path) -> dict:
+    """Load the metadata JSON file at the given path."""
     metadata = {}
     if path.exists():
         with open(path, "r") as file:
@@ -33,15 +32,14 @@ def load_metadata(path: Path):
     return metadata
 
 
-def open_image_editor(img_path: Path):
-    """..."""
-
+def open_image_editor(img_path: Path) -> list:
+    """Open an image in a simple OpenCV window and allow the user to click the four corners of the chess board. Returns the list of clicked coordinates."""
     img = cv2.imread(img_path)
     h, w = img.shape[:2]
 
     corners = []
 
-    def get_coords(event, x, y, flags, param):
+    def get_coords(event: int, x: int, y: int, flags: int, param: None) -> None:
 
         if event == cv2.EVENT_LBUTTONDOWN:
             corners.append((x, y))
@@ -65,8 +63,8 @@ def open_image_editor(img_path: Path):
     return corners
 
 
-def annotate_corners():
-
+def annotate_corners() -> None:
+    """Chess CV utilities adapted from CVChess with minor integration changes."""
     metadata = load_metadata()
 
     for img_path in CUSTOM_DIR.iterdir():
@@ -86,9 +84,8 @@ def annotate_corners():
         json.dump(metadata, file, indent=4)
 
 
-def compute_iou(pts_a, pts_b):
-    """..."""
-
+def compute_iou(pts_a: list, pts_b: list) -> float:
+    """Compute the Intersection over Union (IoU) of two polygons."""
     poly_a = Polygon(pts_a)
     poly_b = Polygon(pts_b)
 
@@ -107,9 +104,8 @@ def compute_iou(pts_a, pts_b):
     return inter_area / union_area
 
 
-def create_dataset(title, images, metadata):
-    """..."""
-
+def create_dataset(title: str, images: list, metadata: dict) -> list:
+    """Create a dataset of image paths and their corresponding target corners based on the provided metadata for the given dataset title."""
     dataset = []
 
     if title == "Unity":
@@ -140,9 +136,8 @@ def create_dataset(title, images, metadata):
     return dataset
 
 
-def run_benchmark(title, images, metadata, results):
-    """..."""
-
+def run_benchmark(title: str, images: list, metadata: dict, results: dict) -> None:
+    """Run evaluation benchmark for the specified dataset."""
     dataset = create_dataset(title, images, metadata)
 
     iou_scores_ours = []
@@ -190,8 +185,8 @@ def run_benchmark(title, images, metadata, results):
     results[title]["success_paper_08"] = success_paper_08
 
 
-def main():
-
+def main() -> None:
+    """Main entry point: load metadata, run benchmarks, and save results."""
     # todo: store interesting cases
 
     results = {}

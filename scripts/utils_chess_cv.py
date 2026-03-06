@@ -1,4 +1,5 @@
-"""
+"""Chess CV utilities adapted from CVChess with minor integration changes.
+
 Attribution:
 -----------
 Source: Adapted from 'chess-cv'
@@ -11,8 +12,8 @@ Includes minor modifications for integration; core functionality remains unchang
 from the original source.
 """
 
-import numpy as np
 import cv2
+import numpy as np
 
 ID_TO_PIECE = {
     0: 'P', 1: 'R', 2: 'N', 3: 'B', 4: 'Q', 5: 'K',

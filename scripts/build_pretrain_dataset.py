@@ -1,15 +1,13 @@
-"""
-Transform raw synthetic data from various sources into
-400x400x3 top-down views for model training.
-"""
+"""Build a unified pretraining dataset of top-down chessboard crops and FEN labels."""
 
-import utils
-import utils_chess_cv
-import json
 import csv
+import json
 from pathlib import Path
+
 import cv2
 import numpy as np
+import utils
+import utils_chess_cv
 from tqdm import tqdm
 
 OUT_DIR = Path(r"C:\Users\miles\Documents\Pre-Training Dataset")
@@ -18,7 +16,6 @@ METADATA_DIR = OUT_DIR / "metadata.json"
 
 def save_metadata(metadata: dict) -> None:
     """Save metadata to disk and prevent file corruption if the script crashes during write."""
-
     temp_path = METADATA_DIR.with_suffix(".tmp")
     with open(temp_path, "w") as file:
         json.dump(metadata, file, indent=4)
@@ -29,7 +26,6 @@ def save_metadata(metadata: dict) -> None:
 
 def generate_fen_from_config(config: dict) -> str:
     """Generate FEN string from Kaggle SynthChess configuration dictionary."""
-
     # todo: merge with similar function in utils.py
 
     piece_map = {
@@ -68,7 +64,6 @@ def generate_fen_from_config(config: dict) -> str:
 def process_and_save_entry(
         img_path: Path, corners: np.ndarray, out_name: str, fen: str, metadata: dict) -> None:
     """Core logic: check existence, warp image, save file, and update metadata."""
-
     out_path = OUT_DIR / out_name
     if out_path.exists() and out_name in metadata:
         return
@@ -86,7 +81,6 @@ def process_and_save_entry(
 
 def process_unity(dir: Path, metadata: dict) -> None:
     """Process Unity dataset images using corner data from metadata.json."""
-
     with open(dir / "metadata.json", "r") as file:
         image_data = json.load(file)
 
@@ -109,7 +103,6 @@ def process_unity(dir: Path, metadata: dict) -> None:
 
 def process_kaggle_synth(dir: Path, metadata: dict) -> None:
     """Process Kaggle SynthChess dataset calculating FEN from config."""
-
     image_paths = list(dir.glob("*.jpg"))
     for img_path in tqdm(image_paths, desc="Kaggle SynthChess", unit="img"):
 
@@ -134,7 +127,6 @@ def process_kaggle_synth(dir: Path, metadata: dict) -> None:
 
 def process_kaggle_render(dir: Path, metadata: dict) -> None:
     """Process Kaggle Render dataset using FENs from CSV and corners from JSON."""
-
     rgb_dir = dir / "rgb"
     annotations_dir = dir / "annotations"
 
@@ -160,7 +152,6 @@ def process_kaggle_render(dir: Path, metadata: dict) -> None:
 
 def process_blender(dir: Path, metadata: dict) -> None:
     """Process Blender dataset where JSON shares the filename."""
-
     image_paths = list(dir.rglob("*.png"))
     for img_path in tqdm(image_paths, desc="Blender", unit="img"):
 
@@ -177,8 +168,8 @@ def process_blender(dir: Path, metadata: dict) -> None:
         process_and_save_entry(img_path, corners, out_name, fen, metadata)
 
 
-def main():
-
+def main() -> None:
+    """Main entry point: load metadata, process datasets, and save results."""
     metadata = {}
     if METADATA_DIR.exists():
         with open(METADATA_DIR, "r") as file:
