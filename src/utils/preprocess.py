@@ -509,7 +509,7 @@ def pre_process(config):
         image_to_pieces[ann["image_id"]].append(ann)
 
     for split in ["train", "val", "test"]:
-        print(f"\Processing {split.upper()} split")
+        print(f"Processing {split.upper()} split")
         X, y = [], []
         image_ids = annotations["splits"][split]["image_ids"]
 
@@ -536,7 +536,7 @@ def pre_process(config):
         print(f"Created {output_filename} with {len(X)} entries.")
 
 
-def create_pickle(base_dir, image_dir, json_file_name, split_ratios=[0.7, 0.2, 0.1]):
+def create_pickle(base_dir, image_dir, json_file_name, split_ratios=[0.0, 0.0, 1]):
     base_path = Path(base_dir)
     image_dir = Path(image_dir)
     json_path = base_path / json_file_name
@@ -549,10 +549,18 @@ def create_pickle(base_dir, image_dir, json_file_name, split_ratios=[0.7, 0.2, 0
     print(f"{len(files)} images in the folder.")
 
     for file_name in files:
-        if file_name in label_data:
+        file_stem = Path(file_name).stem
+
+        if file_stem in label_data:
+            # 1. Extract the raw FEN from the JSON
+            raw_fen = label_data[file_stem]["fen"]
+
+            # 2. Convert it to the 0-padded format
+            expanded_fen = expand_fen_string(raw_fen)
+
+            # 3. Append the EXPANDED FEN instead of the raw one
             file_path = str(image_dir / file_name)
-            fen = label_data[file_name]["fen"]
-            data_pairs.append((file_path, fen))
+            data_pairs.append((file_path, expanded_fen))
 
     total = len(data_pairs)
     train_end = int(total * split_ratios[0])
@@ -567,7 +575,7 @@ def create_pickle(base_dir, image_dir, json_file_name, split_ratios=[0.7, 0.2, 0
     for split_name, pairs in splits.items():
         X = [pair[0] for pair in pairs]
         y = [pair[1] for pair in pairs]
-        pkl_save_path = base_path / f"unity_{split_name}_data.pkl"
+        pkl_save_path = base_path / f"unseen_{split_name}_data.pkl"
 
         with open(pkl_save_path, "wb") as f:
             pickle.dump((X, y), f)
@@ -575,9 +583,131 @@ def create_pickle(base_dir, image_dir, json_file_name, split_ratios=[0.7, 0.2, 0
         print(f"Saved {len(X)} samples to: {pkl_save_path}")
 
 
+def inspect_pickle(pkl_file_path, num_samples=5):
+    """
+    Loads a pickle file and prints a summary along with a few samples.
+    """
+    pkl_path = Path(pkl_file_path)
+
+    if not pkl_path.exists():
+        print(f"Error: Could not find the file at {pkl_path}")
+        return
+
+    # Open the pickle file in read-binary ("rb") mode
+    with open(pkl_path, "rb") as f:
+        X, y = pickle.load(f)
+
+    print(f"--- Inspecting: {pkl_path.name} ---")
+    print(f"Total samples in file: {len(X)}")
+    print(f"Data type of X (features): {type(X)}")
+    print(f"Data type of y (labels): {type(y)}\n")
+
+    # Print the first few samples to visually check the data
+    samples_to_show = 10
+    print(f"Showing the first {samples_to_show} pairs:\n")
+
+    for i in range(samples_to_show):
+        print(f"Sample {i+1}:")
+        print(f"  Image Path (X): {X[i]}")
+        print(f"  FEN String (y): {y[i]}\n")
+
+
+def preprocess_chessred():
+
+    path_to_annotations = "G:/Meine Ablage/DLCV/annotations.json"
+    data_dir = "G:/Meine Ablage/DLCV/ChessReD"
+    preprocessed_image_dir = "G:/Meine Ablage/DLCV/ChessReD_Hough"
+
+    with open(path_to_annotations, "r") as f:
+        annotations = json.load(f)
+
+    # Create save directory if it doesn't exist
+    save_dir = "G:/Meine Ablage/DLCV/ChessReD_Hough_pkl"
+    os.makedirs(save_dir, exist_ok=True)
+
+    X = []  # Paths to warped images
+    y = []  # Labels (4 FEN rotations each)
+
+    valid_ids = []
+    missing_ids = []
+
+    # 1. Populate the pieces dictionary so we can generate the FEN strings
+    image_to_pieces = defaultdict(list)
+    for ann in annotations["annotations"]["pieces"]:
+        image_to_pieces[ann["image_id"]].append(ann)
+
+    # 2. Get the training image IDs
+    chessred_ids = annotations["splits"]["train"]["image_ids"]
+
+    # 3. Loop through IDs, check if image exists, and create data pairs
+    for i in tqdm(chessred_ids, desc="Linking Preprocessed Images to FEN"):
+        # Assuming your previous script saved them as "ID.png"
+        img_save_path = os.path.join(preprocessed_image_dir, f"{i}.png")
+
+        # Check if we actually have the preprocessed image
+        if not os.path.exists(img_save_path):
+            missing_ids.append(i)
+            continue
+
+        try:
+            # Get FEN using your existing function
+            pieces = image_to_pieces[i]
+            fen = pieces_to_fen(pieces)
+
+            X.append(img_save_path)
+            y.append(fen)
+            valid_ids.append(i)
+
+        except Exception as e:
+            print(f"Error parsing FEN for image {i}: {e}")
+            missing_ids.append(i)
+
+    # 4. Save the final pickle file
+    pkl_save_path = "G:/Meine Ablage/DLCV/test/chessred_hough.pkl"
+    with open(pkl_save_path, "wb") as f:
+        pickle.dump((X, y), f)
+
+    print(f"✅ Total valid image-FEN pairs added to pickle: {len(valid_ids)}")
+    print(f"❌ Total missing images (or FEN errors): {len(missing_ids)}")
+
+
+def expand_fen_string(fen_string):
+    """
+    Converts a standard FEN string (e.g. '8/8/1P1K4...')
+    into a dense 0-padded string (e.g. '00000000/00000000/0P0K0000...')
+    """
+    dense_rows = []
+
+    # Split the FEN into its 8 rows
+    for row in fen_string.split("/"):
+        dense_row = ""
+        for char in row:
+            if char.isdigit():
+                # If it's a number (like '5'), append that many '0's
+                dense_row += "0" * int(char)
+            else:
+                # If it's a piece letter, just keep the letter
+                dense_row += char
+
+        dense_rows.append(dense_row)
+
+    return "/".join(dense_rows)
+
+
 if __name__ == "__main__":
-    base_dir = "/scratch/vihps/vihps01/unity"
-    image_dir = "/scratch/vihps/vihps01/Synthetic Data (Unity)"
+    base_dir = "G:/Meine Ablage/DLCV/unseen_data"
+    image_dir = "G:/Meine Ablage/DLCV/Unseen Data"
     json_file_name = "metadata.json"
 
-    create_pickle(base_dir, image_dir, json_file_name)
+    # preprocess_chessred()
+    # create_pickle(base_dir, image_dir, json_file_name)
+    inspect_pickle("G:/Meine Ablage/DLCV/unseen_data/unseen_test_data.pkl")
+    # for i in y:
+    #     print("Original standard FEN:", i)
+    #     print(type(i))
+
+    #     # Use the new function to expand the string
+    #     test = expand_fen_string(i)
+
+    #     print("Expanded 0-padded FEN:", test)
+    #     break

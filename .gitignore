@@ -4,6 +4,7 @@ data/annotations.json
 *.onnx
 *.pth
 onnx_models
+reports/figures
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

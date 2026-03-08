@@ -6,9 +6,10 @@ import os
 from PIL import Image
 
 
-def softmax(x):
-    """Berechnet Softmax stabil über die letzte Achse."""
-    e_x = np.exp(x - np.max(x, axis=1, keepdims=True))
+def softmax(x, temperature=4.0):
+    x_scaled = x / temperature
+    e_x = np.exp(x_scaled - np.max(x_scaled, axis=1, keepdims=True))
+
     return e_x / np.sum(e_x, axis=1, keepdims=True)
 
 
@@ -31,7 +32,7 @@ def run():
     img_np = img_np.transpose(2, 0, 1)
     img_np = np.expand_dims(img_np, axis=0)
 
-    model_path = resource_path("onnx_models/finetuned_chess_model.onnx")
+    model_path = resource_path("onnx_models/finetuned_chess_model_epoch43.onnx")
     sess = rt.InferenceSession(model_path)
     input_name = sess.get_inputs()[0].name
 

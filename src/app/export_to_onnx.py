@@ -1,10 +1,20 @@
 import torch
 import torch.onnx
-from utils.models import CustomChessCNN_v3
 import os
+import sys
 
-MODEL_PATH = "G:/Meine Ablage/DLCV/models/finetuned/epoch15.pth"
-OUTPUT_ONNX = "onnx_models/finetuned_chess_model.onnx"
+# Get the directory where this current script is located
+# Add the parent directory to sys.path
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.abspath(os.path.join(current_dir, ".."))
+if parent_dir not in sys.path:
+    sys.path.append(parent_dir)
+
+from utils.models import CustomChessCNN_v3
+
+
+MODEL_PATH = r"G:/Meine Ablage/DLCV/models/finetuned (new)/epoch43_layer1_freeze_model/best_model.pth"
+OUTPUT_ONNX = r"C:/Users/olden/Desktop/programming/DLCV-Chess/onnx_models/finetuned_chess_model_epoch43.onnx"
 
 
 def export_model():
@@ -21,7 +31,7 @@ def export_model():
 
     dummy_input = torch.randn(1, 3, 256, 256)
 
-    print(f"Exporting to {OUTPUT_ONNX}...")
+    print(f"Exporting to {OUTPUT_ONNX}")
     torch.onnx.export(
         model,
         dummy_input,
@@ -33,7 +43,7 @@ def export_model():
         output_names=["output"],
         dynamic_axes={"input": {0: "batch_size"}, "output": {0: "batch_size"}},
     )
-    print("✅ Export complete!")
+    print("Export complete")
 
 
 if __name__ == "__main__":
