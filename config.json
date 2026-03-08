@@ -13,10 +13,10 @@
   "model_save_dir": "G:/Meine Ablage/DLCV/unity",
   "best_model_weights": "G:/Meine Ablage/DLCV/customV5-residuals-dropout-chessred-full/epoch35.pth",
 
-  "cluster_preprocessed_images_dir": "/scratch/vihps/vihps01/Synthetic Data (Unity)",
-  "cluster_annotation_file": "/scratch/vihps/vihps01/unity/metadata.json",
-  "cluster_model_save_dir": "/scratch/vihps/vihps01/unity/models",
-  "cluster_train_pickle_path": "/scratch/vihps/vihps01/unity/unity_train_data.pkl",
-  "cluster_val_pickle_path": "/scratch/vihps/vihps01/unity/unity_val_data.pkl",
-  "cluster_test_pickle_path": "/scratch/vihps/vihps01/unity/unity_test_data.pkl"
+  "cluster_preprocessed_images_dir": "/scratch/vihps/vihps01/Pre-Training Dataset",
+  "cluster_annotation_file": "/scratch/vihps/vihps01/pretraining/annotations.json",
+  "cluster_model_save_dir": "/scratch/vihps/vihps01/pretraining/models",
+  "cluster_train_pickle_path": "/scratch/vihps/vihps01/real_data/real_train_data.pkl",
+  "cluster_val_pickle_path": "/scratch/vihps/vihps01/real_data/real_val_data.pkl",
+  "cluster_test_pickle_path": "/scratch/vihps/vihps01/real_data/real_test_data.pkl"
 }

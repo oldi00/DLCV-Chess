@@ -9,6 +9,8 @@ package-mode = false
 readme = "README.md"
 requires-python = ">=3.11,<3.15"
 
+dependencies = []
+
 [tool.poetry.dependencies]
 python = ">=3.11,<3.15"
 numpy = ">=2.0.0,<2.3.0"
@@ -31,8 +33,3 @@ torchvision = [
 name = "pytorch-gpu"
 url = "https://download.pytorch.org/whl/cu124"
 priority = "explicit"
-[dependency-groups]
-dev = [
-    "pyinstaller (>=6.18.0,<7.0.0)",
-    "ruff (>=0.15.0,<0.16.0)"
-]

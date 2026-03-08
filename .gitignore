@@ -1,6 +1,7 @@
 tempCodeRunnerFile*
 data/chessred2k/*
 data/annotations.json
+output/
 *.onnx
 *.pth
 
