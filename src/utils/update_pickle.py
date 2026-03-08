@@ -1,7 +1,7 @@
 import pickle
 
 
-# --- Configuration ---
+# --- Configuration (DUMMY PATHS) ---
 input_pkl = (
     "G:/Meine Ablage/DLCV/models/finetuned (new)/pkl/new_cluster_real_test_data.pkl"
 )

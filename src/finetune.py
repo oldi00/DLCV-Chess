@@ -1,55 +1,49 @@
 import os
 import torch
 import json
+import argparse
 from utils.models import CustomChessCNN_v3
-from train_model import (
-    train,
-    get_train_loader,
-    get_val_loader,
-    get_path_from_config_file,
-)
-
-# ==============================================================================
-# CONFIGURATION & CONSTANTS
-# ==============================================================================
-
-CONFIG_FILENAME = "config.json"
-DEFAULT_CONFIG_PATH = "/home/vihps/vihps01/DLCV_Chess/config.json"
-PRETRAINED_WEIGHTS_PATH = "/scratch/vihps/vihps01/unity/models/epoch35.pth"
-
-FINETUNE_LEARNING_RATE = 5e-5
-FINETUNE_EPOCHS = 15
+from train_model import train
+from utils.dataset import get_train_loader, get_val_loader
 
 # ==============================================================================
 # HELPER FUNCTIONS
 # ==============================================================================
 
 
-def freeze_geometric_layers(model):
+def freeze_layers(model, freeze_level):
     """
-    Freezes the early layers (Stem + Layer1) which are responsible for
-    geometric features (lines, corners) that are stable between Sim and Real.
+    Dynamically freezes the network up to the specified layer.
+    Hierarchy: stem -> layer1 -> layer2 -> layer3
     """
-    print("\Freezing Layers")
+    print(f"\nFreezing strategy: {freeze_level.upper()}")
 
-    # Freeze Stem (Initial 7x7 Conv)
-    for param in model.stem.parameters():
-        param.requires_grad = False
-    print("Stem frozen.")
+    # Define the hierarchical order of your CNN blocks
+    hierarchy = ["stem", "layer1", "layer2", "layer3"]
 
-    # Freeze Layer 1
-    for param in model.layer1.parameters():
-        param.requires_grad = False
-    print("Layer 1 frozen.")
+    if freeze_level == "none":
+        print("No layers frozen. Full fine-tuning.")
+    elif freeze_level not in hierarchy:
+        print(
+            f"Warning: Unknown freeze level '{freeze_level}'. Valid options are: none, stem, layer1, layer2, layer3."
+        )
+        print("Proceeding with NO freezing.")
+    else:
+        # Loop through the hierarchy and freeze until we hit the target level
+        for layer_name in hierarchy:
+            module = getattr(model, layer_name)
+            for param in module.parameters():
+                param.requires_grad = False
+            print(f"{layer_name} frozen.")
 
-    # Verify Status
-    print("Layer Status:")
-    trainable_params = 0
-    all_params = 0
-    for name, param in model.named_parameters():
-        all_params += param.numel()
-        if param.requires_grad:
-            trainable_params += param.numel()
+            # Stop freezing once we've frozen the requested level
+            if layer_name == freeze_level:
+                break
+
+    # Verify and print status
+    print("\nLayer Status Summary:")
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    all_params = sum(p.numel() for p in model.parameters())
 
     print(
         f"Trainable Parameters: {trainable_params:,} / {all_params:,} ({(trainable_params / all_params):.1%})"
@@ -62,82 +56,113 @@ def freeze_geometric_layers(model):
 # ==============================================================================
 
 
-def main():
+def main(args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}")
 
-    config_path = (
-        CONFIG_FILENAME if os.path.exists(CONFIG_FILENAME) else DEFAULT_CONFIG_PATH
-    )
-
+    # Load Configuration Base
+    # We will overwrite the paths with our arguments.
+    config_path = "/home/vihps/vihps01/DLCV_Chess/config.json"
     if os.path.exists(config_path):
         with open(config_path, "r") as f:
             config = json.load(f)
-            print(f"Config found at: {config_path}")
     else:
-        print(f"Config file not found at: {config_path}")
-        return
+        config = {}
 
-    print("Initializing model")
+    # Initialize Model
+    print("Initializing CustomChessCNN_v3...")
     model = CustomChessCNN_v3(num_classes=13, dropout=0.3).to(device)
 
-    # --- Load Pre-trained Weights ---
-    if not os.path.exists(PRETRAINED_WEIGHTS_PATH):
-        print(f"{PRETRAINED_WEIGHTS_PATH} not found. Check path.")
+    # Load Pre-trained Synthetic Weights
+    if not os.path.exists(args.weights):
+        print(f"Error: Could not find model weights at {args.weights}")
         return
 
-    print(f"📥 Loading weights from {PRETRAINED_WEIGHTS_PATH}")
-    state_dict = torch.load(PRETRAINED_WEIGHTS_PATH, map_location=device)
-    new_state_dict = {}
-    for k, v in state_dict.items():
-        if k.startswith("module."):
-            new_state_dict[k[7:]] = v
-        else:
-            new_state_dict[k] = v
+    print(f"Loading synthetic weights from: {args.weights}")
+    state_dict = torch.load(args.weights, map_location=device)
 
+    # Handle DDP 'module.' prefix if present
+    new_state_dict = {
+        k[7:] if k.startswith("module.") else k: v for k, v in state_dict.items()
+    }
     model.load_state_dict(new_state_dict)
     print("Weights loaded.")
 
-    freeze_geometric_layers(model)
+    # Apply Freezing
+    freeze_layers(model, args.freeze_level)
+    # DataLoaders
+    print("\nPreparing DataLoaders for Fine-tuning...")
+    print(f"Train Data: {args.train_pkl}")
+    print(f"Val Data:   {args.val_pkl}")
 
-    # --- Prepare DataLoaders ---
-    print("Preparing DataLoaders")
+    # Inject the command-line arguments directly into the config dictionary
+    config["train_pickle_path"] = args.train_pkl
+    config["cluster_train_pickle_path"] = args.train_pkl
+    config["val_pickle_path"] = args.val_pkl
+    config["cluster_val_pickle_path"] = args.val_pkl
 
-    real_train_path = get_path_from_config_file(config, "finetune_train_pickle_path")
-    real_val_path = get_path_from_config_file(config, "finetune_val_pickle_path")
+    train_loader = get_train_loader(config, batch_size=args.batch_size, use_ddp=False)
+    val_loader = get_val_loader(config, batch_size=args.batch_size, use_ddp=False)
 
-    # Overwrite config in memory
-    config["train_pickle_path"] = real_train_path
-    config["val_pickle_path"] = real_val_path
+    # Start Training
+    print("\nStarting Fine-tuning")
+    print(f"Target Save Directory: {args.save_dir}")
 
-    print(f"Training Data:   {real_train_path}")
-    print(f"Validation Data: {real_val_path}")
-
-    train_loader = get_train_loader(config, batch_size=16, use_ddp=False)
-    val_loader = get_val_loader(config, batch_size=16, use_ddp=False)
-
-    ft_save_dir = get_path_from_config_file(config, "finetune_save_dir")
-    if not ft_save_dir:
-        base_save_dir = get_path_from_config_file(config, "model_save_dir")
-        ft_save_dir = os.path.join(base_save_dir, "finetuned_real")
-
-    print("Starting Fine-tuning")
-    print(f"Target Save Directory: {ft_save_dir}")
-
-    # --- Start Training ---
     train(
         model=model,
         dataloader=train_loader,
         device=device,
-        epochs=FINETUNE_EPOCHS,
-        lr=FINETUNE_LEARNING_RATE,
+        epochs=args.epochs,
+        lr=args.lr,
         save_model=True,
-        save_dir=ft_save_dir,
+        save_dir=args.save_dir,
         val_loader=val_loader,
         rank=0,
         use_ddp=False,
+        patience=args.patience,
     )
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="Fine-tune the chess model")
+
+    # Required Paths
+    parser.add_argument(
+        "--weights", type=str, required=True, help="Path to the pre-trained .pth model"
+    )
+    parser.add_argument(
+        "--train_pkl", type=str, required=True, help="Path to the real train data .pkl"
+    )
+    parser.add_argument(
+        "--val_pkl", type=str, required=True, help="Path to the real val data .pkl"
+    )
+    parser.add_argument(
+        "--save_dir",
+        type=str,
+        required=True,
+        help="Directory to save the fine-tuned checkpoints",
+    )
+
+    # Hyperparameters
+    parser.add_argument(
+        "--epochs", type=int, default=20, help="Number of training epochs"
+    )
+    parser.add_argument("--lr", type=float, default=5e-5, help="Learning rate")
+    parser.add_argument(
+        "--batch_size", type=int, default=16, help="Batch size for DataLoader"
+    )
+    parser.add_argument(
+        "--patience", type=int, default=3, help="Early stopping patience"
+    )
+
+    # Freezing Argument
+    parser.add_argument(
+        "--freeze_level",
+        type=str,
+        default="layer1",
+        choices=["none", "stem", "layer1", "layer2", "layer3"],
+        help="Freeze the network up to this level. Options: none, stem, layer1, layer2, layer3",
+    )
+
+    args = parser.parse_args()
+    main(args)

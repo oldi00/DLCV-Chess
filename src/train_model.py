@@ -1,19 +1,23 @@
 import os
 import torch
+import argparse
 import matplotlib.pyplot as plt
 import torch.nn.functional as F
-import json
 import torch.distributed as dist
-from torch.nn.parallel import DistributedDataParallel as DDP
 
 from evaluation.eval import evaluate_rotation_invariant
+from torch.nn.parallel import DistributedDataParallel as DDP
 from utils.models import CustomChessCNN_v3
 from utils.dataset import (
-    get_path_from_config_file,
     get_train_loader,
     get_val_loader,
 )
 from tqdm import tqdm
+
+
+TRAINING_PLOT_FILENAME = "training_plot.png"
+CHECKPOINT_PREFIX = "epoch"
+CONFIG_MODEL_SAVE_KEY = "model_save_dir"
 
 
 def train(
@@ -29,8 +33,9 @@ def train(
     empty_class_idx=12,
     empty_class_weight=0.3,
     val_loader=None,
-    rank=0,  # <- FLAG: RANK
-    use_ddp=False,  # <- FLAG: DDP
+    rank=0,
+    use_ddp=False,
+    patience=None,
 ):
     if not use_ddp:
         model = model.to(device)
@@ -39,7 +44,8 @@ def train(
     weights[empty_class_idx] = empty_class_weight
     weights = weights.to(device)
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
+    trainable_params = filter(lambda p: p.requires_grad, model.parameters())
+    optimizer = torch.optim.Adam(trainable_params, lr=lr, weight_decay=weight_decay)
 
     epoch_train_losses = []
     epoch_train_acc_all = []
@@ -50,23 +56,33 @@ def train(
     epoch_val_acc_no_empty = []
 
     if save_model and rank == 0:
-        assert (
-            save_dir is not None
-        ), "Please provide a save_dir to save model checkpoints."
+        assert save_dir is not None, (
+            "Please provide a save_dir to save model checkpoints."
+        )
         os.makedirs(save_dir, exist_ok=True)
+
+    # Early Stopping Trackers
+    best_val_loss = float("inf")
+    epochs_no_improve = 0
 
     for epoch in range(epochs):
         if use_ddp:
             dataloader.sampler.set_epoch(epoch)
 
         model.train()
+
+        for module in model.modules():
+            if isinstance(module, torch.nn.modules.batchnorm._BatchNorm):
+                # If the BN layer has weights and they are frozen, lock it to eval
+                if module.weight is not None and not module.weight.requires_grad:
+                    module.eval()
+
         running_loss = 0.0
         correct_all = 0
         correct_non_empty = 0
         total_all = 0
         total_non_empty = 0
 
-        # TQDM Bar nur auf Rank 0 anzeigen, sonst crasht der Log
         if rank == 0:
             iterator = tqdm(dataloader, desc=f"Epoch {epoch + 1}/{epochs}", leave=False)
         else:
@@ -124,7 +140,7 @@ def train(
             save_path = os.path.join(save_dir, f"epoch{epoch + 1}.pth")
             state_dict = model.module.state_dict() if use_ddp else model.state_dict()
             torch.save(state_dict, save_path)
-            print(f"✅ Model saved to: {save_path}")
+            print(f"Model saved to: {save_path}")
 
         # --- Evaluate ---
         if val_loader is not None:
@@ -135,19 +151,43 @@ def train(
             epoch_val_acc_all.append(val_acc_all)
             epoch_val_acc_no_empty.append(val_acc_no_empty)
 
+            # Early Stopping Logic
+            if patience is not None:
+                if val_loss < best_val_loss:
+                    best_val_loss = val_loss
+                    epochs_no_improve = 0
+
+                    if save_model and rank == 0:
+                        # Save the absolute best model
+                        best_path = os.path.join(save_dir, "best_model.pth")
+                        state_dict = (
+                            model.module.state_dict() if use_ddp else model.state_dict()
+                        )
+                        torch.save(state_dict, best_path)
+                        print(f"Validation loss improved. Saved {best_path}")
+                else:
+                    epochs_no_improve += 1
+                    if rank == 0:
+                        print(
+                            f"Val loss did not improve for {epochs_no_improve} epoch(s)."
+                        )
+                    if epochs_no_improve >= patience:
+                        if rank == 0:
+                            print(f"Early stopping triggered after {epoch + 1} epochs!")
+                        break
+
     if plot_loss and rank == 0:
         if "SLURM_JOB_ID" in os.environ:
             plt.figure(figsize=(12, 5))
-            # Loss plot
             plt.subplot(1, 2, 1)
             plt.plot(epoch_train_losses, label="Train Loss")
+
             if val_loader is not None:
                 plt.plot(epoch_val_losses, label="Val Loss")
             plt.xlabel("Epoch")
             plt.ylabel("Loss")
             plt.title("Loss Curve")
             plt.legend()
-            # Accuracy plot
             plt.subplot(1, 2, 2)
             plt.plot(epoch_train_acc_all, label="Train Acc (All)")
             plt.plot(epoch_train_acc_no_empty, label="Train Acc (Non-Empty)")
@@ -160,36 +200,61 @@ def train(
             plt.legend()
             plt.tight_layout()
             plt.savefig(os.path.join(save_dir, "training_plot.png"))
-            # plt.show()
         else:
             print("Cluster environment detected: Skipping plots.")
 
 
-if __name__ == "__main__":
-    # --- DDP INITIALISIERUNG ---
+# ===============================================================
+# MAIN EXECUTION
+# ===============================================================
 
-    # SLURM DDP
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Pre-train the Chess CNN")
+
+    # --- Paths (Required) ---
+    parser.add_argument(
+        "--train_pkl",
+        type=str,
+        required=True,
+        help="Path to the synthetic train data .pkl",
+    )
+    parser.add_argument(
+        "--val_pkl", type=str, required=True, help="Path to the synthetic val data .pkl"
+    )
+    parser.add_argument(
+        "--save_dir", type=str, required=True, help="Directory to save the checkpoints"
+    )
+
+    # --- Hyperparameters (Optional with defaults) ---
+    parser.add_argument(
+        "--epochs", type=int, default=50, help="Number of training epochs"
+    )
+    parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate")
+    parser.add_argument("--batch_size", type=int, default=16, help="Batch size per GPU")
+    parser.add_argument("--patience", type=int, default=20, help="Early stopping")
+
+    args = parser.parse_args()
+
+    # --- DDP ---
+    # Check for SLURM-Environment
     if "SLURM_PROCID" in os.environ:
         rank = int(os.environ["SLURM_PROCID"])
         world_size = int(os.environ["SLURM_NTASKS"])
         local_rank = int(os.environ["SLURM_LOCALID"])
 
-        # WICHTIG: PyTorch interne Variablen setzen, falls Bibliotheken sich darauf verlassen
         os.environ["RANK"] = str(rank)
         os.environ["WORLD_SIZE"] = str(world_size)
         os.environ["LOCAL_RANK"] = str(local_rank)
 
-        # Initialisiere Prozess-Gruppe
-        # (MASTER_ADDR und MASTER_PORT müssen im submit_job.sh exportiert sein!)
         dist.init_process_group(backend="nccl", rank=rank, world_size=world_size)
-
         torch.cuda.set_device(local_rank)
         device = torch.device(f"cuda:{local_rank}")
         use_ddp = True
 
         if rank == 0:
-            print(f"🚀 DDP initialized via SLURM. World size: {world_size}")
+            print(f"DDP initialized via SLURM. Size: {world_size}")
 
+    # Fallback with torch
     elif "RANK" in os.environ and "WORLD_SIZE" in os.environ:
         rank = int(os.environ["RANK"])
         world_size = int(os.environ["WORLD_SIZE"])
@@ -200,49 +265,57 @@ if __name__ == "__main__":
         device = torch.device(f"cuda:{local_rank}")
         use_ddp = True
         if rank == 0:
-            print(f"🚀 DDP initialized via torchrun. World size: {world_size}")
+            print(f"DDP initialized via torchrun. Size: {world_size}")
 
-    # No DDP (for local testing)
+    # Local no DDP
     else:
         rank = 0
         local_rank = 0
         world_size = 1
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         use_ddp = False
-        print("⚠️ No DDP environment found. Running in single process mode.")
+        print("No DDP environment found. Running in single process mode.")
 
-    # Info-Ausgabe
+    # Info
     if torch.cuda.is_available():
         gpu_name = torch.cuda.get_device_name(local_rank)
         print(f"[{rank}/{world_size - 1}] Process on GPU: {gpu_name}")
     else:
         print(f"[{rank}/{world_size - 1}] Process on CPU")
 
-    # Load Configuration
-    with open(r"/home/vihps/vihps01/DLCV_Chess/config.json", "r") as f:
-        config = json.load(f)
-
-    save_dir = get_path_from_config_file(config, "model_save_dir")
+    # Setup Config
+    config = {
+        "train_pickle_path": args.train_pkl,
+        "cluster_train_pickle_path": args.train_pkl,
+        "val_pickle_path": args.val_pkl,
+        "cluster_val_pickle_path": args.val_pkl,
+        "model_save_dir": args.save_dir,
+        "cluster_model_save_dir": args.save_dir,
+    }
 
     # Initialize Data and Model
-    train_loader = get_train_loader(config, batch_size=16, use_ddp=use_ddp)
-    val_loader = get_val_loader(config, batch_size=16, use_ddp=use_ddp)
+    train_loader = get_train_loader(config, batch_size=args.batch_size, use_ddp=use_ddp)
+    val_loader = get_val_loader(config, batch_size=args.batch_size, use_ddp=use_ddp)
 
     model = CustomChessCNN_v3(num_classes=13, dropout=0.3).to(device)
 
+    # Wrap Model in DDP
     if use_ddp:
         model = DDP(model, device_ids=[local_rank])
 
+    # Start Training
     train(
         model=model,
         dataloader=train_loader,
         device=device,
-        epochs=35,
+        epochs=args.epochs,
+        lr=args.lr,
         save_model=True,
-        save_dir=save_dir,
+        save_dir=args.save_dir,
         val_loader=val_loader,
         rank=rank,
         use_ddp=use_ddp,
+        patience=args.patience,
     )
 
     # Cleanup

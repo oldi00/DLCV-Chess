@@ -130,10 +130,10 @@ def test_raw_pytorch_model(image_path):
 
     final_output = "[" + ", ".join(rows_str) + "]"
 
-    print("MODELL STDOUT:")
+    print("MODEL STDOUT:")
     print(final_output[:500] + "...")
 
-    # 6. Mache das Board lesbar
+    # Convert probabilities to board
     board_str = probs_to_board_string(probs)
     print("\nBOARD (PYTORCH):")
     print(board_str)

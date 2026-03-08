@@ -1,0 +1,485 @@
+import os
+import cv2
+import sys
+import torch
+import collections
+import numpy as np
+import matplotlib.pyplot as plt
+import torch.nn.functional as F
+
+from tqdm import tqdm
+
+# Configure Paths, so that utils can be imported.
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.abspath(os.path.join(current_dir, ".."))
+if parent_dir not in sys.path:
+    sys.path.append(parent_dir)
+
+from utils.preprocess import id_to_piece as DEFAULT_ID_TO_PIECE
+
+
+def evaluate_rotation_invariant(model, dataloader, device, empty_class_idx=12, rank=0):
+    model.eval()
+    total_loss = 0.0
+    correct_all = 0
+    correct_non_empty = 0
+    total_all = 0
+    total_non_empty = 0
+    board_error_hist = collections.Counter()
+
+    if rank == 0:
+        iterator = tqdm(dataloader, desc="Evaluating", leave=False)
+    else:
+        iterator = dataloader
+
+    with torch.no_grad():
+        for images, label_rotations in iterator:
+            images = images.to(device)
+            label_rotations = [
+                [lbl.to(device) for lbl in rots] for rots in label_rotations
+            ]
+
+            outputs = model(images)
+
+            matched_labels = []
+            for i in range(outputs.size(0)):
+                losses = [
+                    F.cross_entropy(outputs[i], lbl) for lbl in label_rotations[i]
+                ]
+                min_idx = torch.argmin(torch.stack(losses))
+                total_loss += losses[min_idx].item()
+                matched_labels.append(label_rotations[i][min_idx])
+
+            preds = outputs.argmax(dim=2)
+            matched_labels_tensor = torch.stack(matched_labels)
+
+            mask = matched_labels_tensor != empty_class_idx
+            correct_all += (preds == matched_labels_tensor).sum().item()
+            total_all += matched_labels_tensor.numel()
+            correct_non_empty += ((preds == matched_labels_tensor) & mask).sum().item()
+            total_non_empty += mask.sum().item()
+
+            if rank == 0:
+                if isinstance(iterator, tqdm):
+                    acc = correct_all / total_all if total_all > 0 else 0.0
+                    iterator.set_postfix(acc=f"{acc:.2%}")
+
+            batch_errors = (preds != matched_labels_tensor).sum(dim=1)
+            for err in batch_errors.cpu().tolist():
+                board_error_hist[err] += 1
+
+    avg_loss = total_loss / len(dataloader)
+    acc_all = correct_all / total_all if total_all > 0 else 0.0
+    acc_non_empty = correct_non_empty / total_non_empty if total_non_empty > 0 else 0.0
+
+    if rank == 0:
+        print(f"\nValidation Loss: {avg_loss:.4f}")
+        print(f"Accuracy (all squares): {acc_all:.4f}")
+        print(f"Accuracy (non-empty squares only): {acc_non_empty:.4f}")
+        print("\nBoard-level prediction accuracy (errors per board):")
+        for k in sorted(board_error_hist):
+            print(f"  Boards with {k:2d} wrong squares: {board_error_hist[k]}")
+
+    return avg_loss, acc_all, acc_non_empty, board_error_hist
+
+
+def evaluate_rotation_invariant_visuals(
+    model, dataloader, device, empty_class_idx=12, image_paths=None, label_to_fen=None
+):
+    model.eval()
+    total_loss = 0.0
+    correct_all = 0
+    correct_non_empty = 0
+    total_all = 0
+    total_non_empty = 0
+    board_error_hist = collections.Counter()
+
+    pbar = tqdm(dataloader, desc="Evaluating", leave=False)
+    example_idx = 0  # to track index for image_paths
+
+    with torch.no_grad():
+        for images, label_rotations, image_paths_batch in pbar:
+            images = images.to(device)
+            label_rotations = [
+                [lbl.to(device) for lbl in rots] for rots in label_rotations
+            ]
+
+            outputs = model(images)
+            matched_labels = []
+            for i in range(outputs.size(0)):
+                losses = [
+                    F.cross_entropy(outputs[i], lbl) for lbl in label_rotations[i]
+                ]
+                min_idx = torch.argmin(torch.stack(losses))
+                total_loss += losses[min_idx].item()
+                matched_labels.append(label_rotations[i][min_idx])
+
+            preds = outputs.argmax(dim=2)
+            matched_labels_tensor = torch.stack(matched_labels)
+
+            mask = matched_labels_tensor != empty_class_idx
+            correct_all += (preds == matched_labels_tensor).sum().item()
+            total_all += matched_labels_tensor.numel()
+            correct_non_empty += ((preds == matched_labels_tensor) & mask).sum().item()
+            acc = correct_all / total_all if total_all > 0 else 0.0
+            pbar.set_postfix(acc=f"{acc:.2%}")
+
+            batch_errors = (preds != matched_labels_tensor).sum(dim=1)
+
+            for i in range(len(batch_errors)):
+                num_errors = batch_errors[i].item()
+                board_error_hist[num_errors] += 1
+
+                if (
+                    num_errors == 0
+                    and image_paths is not None
+                    and label_to_fen is not None
+                ):
+                    image_path = image_paths_batch[i]
+
+                    img = cv2.imread(image_path)
+                    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+                    gt_fen = label_to_fen(matched_labels_tensor[i].cpu())
+                    pred_fen = label_to_fen(preds[i].cpu())
+
+                    # --- Plot image with FENs ---
+                    plt.figure(figsize=(6, 6))
+                    plt.imshow(img)
+                    plt.axis("off")
+                    plt.title("Correct Prediction")
+                    plt.figtext(
+                        0.5,
+                        -0.1,
+                        f"GT FEN:   {gt_fen}\nPred FEN: {pred_fen}",
+                        wrap=True,
+                        horizontalalignment="center",
+                        fontsize=10,
+                    )
+                    plt.tight_layout()
+                    plt.show()
+
+                example_idx += 1
+
+    avg_loss = total_loss / len(dataloader)
+    acc_all = correct_all / total_all
+    acc_non_empty = correct_non_empty / total_non_empty
+
+    print(f"\nValidation Loss: {avg_loss:.4f}")
+    print(f"Accuracy (all squares): {acc_all:.4f}")
+    print(f"Accuracy (non-empty squares only): {acc_non_empty:.4f}")
+    print("\nBoard-level prediction accuracy (errors per board):")
+    for k in sorted(board_error_hist):
+        print(f"  Boards with {k:2d} wrong squares: {board_error_hist[k]}")
+
+    return avg_loss, acc_all, acc_non_empty, board_error_hist
+
+
+def _basic_legality_checks(pred_labels_64, id_to_piece=DEFAULT_ID_TO_PIECE):
+    arr = np.asarray(pred_labels_64, dtype=int)
+    pieces = [id_to_piece[int(v)] for v in arr]
+    wK = sum(p == "K" for p in pieces)
+    bK = sum(p == "k" for p in pieces)
+    wP = sum(p == "P" for p in pieces)
+    bP = sum(p == "p" for p in pieces)
+    if wK != 1 or bK != 1:
+        return False
+    top_rank = pieces[:8]
+    bottom_rank = pieces[-8:]
+    if any(p == "P" for p in top_rank) or any(p == "P" for p in bottom_rank):
+        return False
+    if any(p == "p" for p in top_rank) or any(p == "p" for p in bottom_rank):
+        return False
+    if wP > 8 or bP > 8:
+        return False
+    return True
+
+
+def _confusion_and_prf1(gt, pr, num_classes=13):
+    gt = np.asarray(gt, dtype=int)
+    pr = np.asarray(pr, dtype=int)
+    conf = np.zeros((num_classes, num_classes), dtype=np.int64)
+    for g, p in zip(gt, pr):
+        conf[g, p] += 1
+
+    eps = 1e-12
+    tp = np.diag(conf)
+    fp = conf.sum(axis=0) - tp
+    fn = conf.sum(axis=1) - tp
+    prec = tp / np.maximum(tp + fp, eps)
+    rec = tp / np.maximum(tp + fn, eps)
+    f1 = 2 * prec * rec / np.maximum(prec + rec, eps)
+    support = conf.sum(axis=1)
+    return conf, prec, rec, f1, support
+
+
+def _ece_reliability(max_probs, correct, n_bins=15):
+    max_probs = np.asarray(max_probs)
+    correct = np.asarray(correct).astype(np.float32)
+    bins = np.linspace(0, 1, n_bins + 1)
+    ece = 0.0
+    bin_conf = []
+    bin_acc = []
+    bin_count = []
+    N = len(max_probs)
+    for i in range(n_bins):
+        lo, hi = bins[i], bins[i + 1]
+        mask = (
+            (max_probs > lo) & (max_probs <= hi)
+            if i > 0
+            else (max_probs >= lo) & (max_probs <= hi)
+        )
+        cnt = mask.sum()
+        if cnt == 0:
+            bin_conf.append(np.nan)
+            bin_acc.append(np.nan)
+            bin_count.append(0)
+            continue
+        conf = max_probs[mask].mean()
+        acc = correct[mask].mean()
+        ece += (cnt / N) * abs(acc - conf)
+        bin_conf.append(conf)
+        bin_acc.append(acc)
+        bin_count.append(int(cnt))
+    return float(ece), np.array(bin_conf), np.array(bin_acc), np.array(bin_count)
+
+
+def evaluate_plus(
+    model,
+    dataloader,
+    device,
+    empty_class_idx=12,
+    id_to_piece=DEFAULT_ID_TO_PIECE,
+    compute_plots=True,
+    title_prefix="Eval",
+):
+    model.eval()
+    total_loss = 0.0
+    all_gt = []
+    all_pr = []
+    all_pr_top2_hits = []
+    all_maxprob = []
+    all_correct_flags = []
+
+    board_errors = []
+    rotation_picks = []  # which rotation idx chosen per board
+    per_board_legality = []
+
+    # 8x8 correctness heatmap sums
+    heat_sum = np.zeros((8, 8), dtype=np.float64)
+    heat_cnt = 0
+
+    with torch.no_grad():
+        pbar = tqdm(dataloader, desc="evaluate_plus", leave=False)
+        for batch in pbar:
+            if len(batch) == 2:
+                images, label_rotations = batch
+            else:
+                images, label_rotations, _ = batch
+
+            images = images.to(device)
+            label_rotations = [
+                [lbl.to(device) for lbl in rots] for rots in label_rotations
+            ]
+
+            outputs = model(images)  # (B, 64, 13)
+            probs = F.softmax(outputs, dim=2)
+            max_prob, pred = probs.max(dim=2)  # (B,64)
+            top2 = probs.topk(k=2, dim=2).indices  # (B,64,2)
+
+            B = outputs.size(0)
+            matched_labels = []
+            chosen_rot_idx = []
+            losses = []
+            for i in range(B):
+                lossi = [F.cross_entropy(outputs[i], lbl) for lbl in label_rotations[i]]
+                li = torch.stack(lossi)
+                min_idx = int(torch.argmin(li).item())
+                chosen_rot_idx.append(min_idx)
+                losses.append(float(lossi[min_idx].item()))
+                matched_labels.append(label_rotations[i][min_idx])
+
+            total_loss += np.mean(losses)
+            rotation_picks.extend(chosen_rot_idx)
+
+            matched_labels = torch.stack(matched_labels)  # (B,64)
+            gt_np = matched_labels.detach().cpu().numpy().astype(int)
+            pr_np = pred.detach().cpu().numpy().astype(int)
+            maxp_np = max_prob.detach().cpu().numpy()
+
+            correct_np = gt_np == pr_np
+            top2_np = top2.detach().cpu().numpy()
+            pr_top2_hit = np.any(top2_np == gt_np[..., None], axis=2)
+
+            all_gt.append(gt_np.reshape(-1))
+            all_pr.append(pr_np.reshape(-1))
+            all_pr_top2_hits.append(pr_top2_hit.reshape(-1))
+            all_maxprob.append(maxp_np.reshape(-1))
+            all_correct_flags.append(correct_np.reshape(-1))
+
+            board_err = (gt_np != pr_np).sum(axis=1)  # per board hamming
+            board_errors.extend(board_err.tolist())
+
+            for i in range(B):
+                per_board_legality.append(
+                    _basic_legality_checks(pr_np[i], id_to_piece=id_to_piece)
+                )
+
+            for i in range(B):
+                hm = correct_np[i].reshape(8, 8).astype(np.float32)
+                heat_sum += hm
+                heat_cnt += 1
+
+    all_gt = np.concatenate(all_gt, axis=0)
+    all_pr = np.concatenate(all_pr, axis=0)
+    all_pr_top2_hits = np.concatenate(all_pr_top2_hits, axis=0)
+    all_maxprob = np.concatenate(all_maxprob, axis=0)
+    all_correct_flags = np.concatenate(all_correct_flags, axis=0)
+
+    avg_loss = total_loss / max(1, len(dataloader))
+    acc_all = (all_gt == all_pr).mean()
+    non_empty_mask = all_gt != empty_class_idx
+    acc_non_empty = (
+        (all_gt[non_empty_mask] == all_pr[non_empty_mask]).mean()
+        if non_empty_mask.any()
+        else float("nan")
+    )
+
+    top2_all = all_pr_top2_hits.mean()
+    top2_non_empty = (
+        all_pr_top2_hits[non_empty_mask].mean()
+        if non_empty_mask.any()
+        else float("nan")
+    )
+
+    conf, prec, rec, f1, support = _confusion_and_prf1(all_gt, all_pr, num_classes=13)
+
+    piece_classes = [i for i in range(13) if i != empty_class_idx]
+    macro_f1_pieces = np.nanmean(f1[piece_classes])
+    macro_prec_pieces = np.nanmean(prec[piece_classes])
+    macro_rec_pieces = np.nanmean(rec[piece_classes])
+
+    board_errors = np.array(board_errors)
+    exact_board_acc = np.mean(board_errors == 0)
+    mean_hamming = float(board_errors.mean())
+    median_hamming = float(np.median(board_errors))
+    q25 = float(np.percentile(board_errors, 25))
+    q75 = float(np.percentile(board_errors, 75))
+
+    cdf_k = list(range(0, 11))
+    cdf_vals = [float(np.mean(board_errors <= k)) for k in cdf_k]
+
+    ece, bin_conf, bin_acc, bin_count = _ece_reliability(
+        all_maxprob, all_correct_flags, n_bins=15
+    )
+
+    heat_avg = heat_sum / max(1, heat_cnt)
+    light_mask = np.fromfunction(lambda r, c: (r + c) % 2 == 1, (8, 8))
+    dark_mask = ~light_mask
+    acc_light = float(heat_avg[light_mask].mean())
+    acc_dark = float(heat_avg[dark_mask].mean())
+
+    legality_rate = float(np.mean(per_board_legality))
+
+    rotation_picks = np.array(rotation_picks)
+    rot_hist = {
+        0: int(np.sum(rotation_picks == 0)),
+        1: int(np.sum(rotation_picks == 1)),
+        2: int(np.sum(rotation_picks == 2)),
+        3: int(np.sum(rotation_picks == 3)),
+    }
+    rot_dist = {k: v / len(rotation_picks) for k, v in rot_hist.items()}
+
+    results = {
+        "avg_loss": float(avg_loss),
+        "square_acc_all": float(acc_all),
+        "square_acc_non_empty": float(acc_non_empty),
+        "top2_acc_all": float(top2_all),
+        "top2_acc_non_empty": float(top2_non_empty),
+        "confusion_matrix": conf,
+        "per_class_precision": prec,
+        "per_class_recall": rec,
+        "per_class_f1": f1,
+        "per_class_support": support,
+        "macro_prec_pieces": float(macro_prec_pieces),
+        "macro_rec_pieces": float(macro_rec_pieces),
+        "macro_f1_pieces": float(macro_f1_pieces),
+        "exact_board_acc": float(exact_board_acc),
+        "board_error_hist": {
+            int(k): int(v) for k, v in zip(*np.unique(board_errors, return_counts=True))
+        },
+        "board_error_mean": mean_hamming,
+        "board_error_median": median_hamming,
+        "board_error_q25": q25,
+        "board_error_q75": q75,
+        "board_error_cdf_k": cdf_k,
+        "board_error_cdf_vals": cdf_vals,
+        "ece": float(ece),
+        "reliability_bin_conf": bin_conf,
+        "reliability_bin_acc": bin_acc,
+        "reliability_bin_count": bin_count,
+        "heatmap_8x8": heat_avg,
+        "acc_light_squares": acc_light,
+        "acc_dark_squares": acc_dark,
+        "legality_rate": legality_rate,
+        "rotation_hist": rot_hist,
+        "rotation_dist": rot_dist,
+    }
+
+    if compute_plots:
+        be = np.clip(board_errors, 0, 15)
+        plt.figure(figsize=(6, 4))
+        plt.hist(be, bins=np.arange(17) - 0.5, rwidth=0.9)
+        plt.title(f"{title_prefix}: Board Errors (clipped at 15)")
+        plt.xlabel("# wrong squares")
+        plt.ylabel("count")
+        plt.show()
+
+        plt.figure(figsize=(6, 4))
+        plt.plot(cdf_k, cdf_vals, marker="o")
+        plt.title(f"{title_prefix}: CDF of Board Errors")
+        plt.xlabel("≤ errors")
+        plt.ylabel("fraction of boards")
+        plt.grid(True, alpha=0.3)
+        plt.show()
+
+        plt.figure(figsize=(7, 6))
+        plt.imshow(conf, interpolation="nearest")
+        plt.title(f"{title_prefix}: Confusion Matrix (13x13)")
+        plt.xlabel("Predicted")
+        plt.ylabel("Ground Truth")
+        plt.colorbar()
+        plt.tight_layout()
+        plt.show()
+
+        ok = ~np.isnan(bin_conf) & ~np.isnan(bin_acc)
+        plt.figure(figsize=(6, 4))
+        plt.plot(bin_conf[ok], bin_acc[ok], marker="o", label="empirical")
+        plt.plot([0, 1], [0, 1], linestyle="--", label="ideal")
+        sizes = bin_count[ok]
+        plt.title(f"{title_prefix}: Reliability (ECE={ece:.3f})")
+        plt.xlabel("confidence")
+        plt.ylabel("accuracy")
+        plt.legend()
+        plt.grid(True, alpha=0.3)
+        plt.show()
+
+        plt.figure(figsize=(5, 5))
+        plt.imshow(heat_avg, vmin=0, vmax=1)
+        plt.title(f"{title_prefix}: Square Accuracy Heatmap")
+        plt.colorbar(label="fraction correct")
+        plt.xticks(range(8))
+        plt.yticks(range(8))
+        plt.tight_layout()
+        plt.show()
+
+        plt.figure(figsize=(5, 3))
+        xs = [0, 1, 2, 3]
+        vals = [rot_hist[k] for k in xs]
+        plt.bar(xs, vals)
+        plt.xticks(xs, ["0°", "90°", "180°", "270°"])
+        plt.title(f"{title_prefix}: Chosen Rotation Counts")
+        plt.tight_layout()
+        plt.show()
+
+    return results
