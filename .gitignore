@@ -1,4 +1,11 @@
 tempCodeRunnerFile*
+data/chessred2k/*
+data/annotations.json
+output/
+*.onnx
+*.pth
+onnx_models
+reports/figures
 sandbox/
 data/chess_games/
 data/FENs/
